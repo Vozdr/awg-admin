@@ -25,14 +25,14 @@ AWG Admin — веб-панель управления клиентами Amnezi
 
 ```routeros
 /user/group/add name=awg-admin policy=read,write,sensitive,api
-/user/add name=awg-admin group=awg-admin password="ЗАМЕНИТЕ_ПАРОЛЬ" address=172.17.0.3/32
+/user/add name=awg-admin group=awg-admin password="ЗАМЕНИТЕ_ПАРОЛЬ" address=172.17.0.2/32
 ```
 
-Пример предполагает, что сеть контейнеров и veth уже настроены, AWG Admin получит `172.17.0.3`, а диск называется `disk1`:
+Для панели создаётся отдельный veth без bridge. Адрес MikroTik в этой сети — `172.17.0.1`, адрес контейнера — `172.17.0.2`:
 
 ```routeros
-/interface/veth/add name=veth-awg-admin address=172.17.0.3/24 gateway=172.17.0.1
-/interface/bridge/port/add bridge=containers interface=veth-awg-admin
+/interface/veth/add name=veth-awg-admin address=172.17.0.2/24 gateway=172.17.0.1
+/ip/address/add address=172.17.0.1/24 interface=veth-awg-admin
 
 /container/envs/add list=awg-admin key=MIKROTIK_HOST value=172.17.0.1
 /container/envs/add list=awg-admin key=MIKROTIK_USERNAME value=awg-admin
@@ -40,10 +40,10 @@ AWG Admin — веб-панель управления клиентами Amnezi
 /container/envs/add list=awg-admin key=AWG_CLIENT_ENDPOINT value=vpn.example.org:51820
 /container/envs/add list=awg-admin key=ADMIN_USERNAME value=admin
 /container/envs/add list=awg-admin key=ADMIN_PASSWORD value="ЗАМЕНИТЕ_ПАРОЛЬ_ПАНЕЛИ"
-/container/envs/add list=awg-admin key=SESSION_SECRET value="ДЛИННАЯ_СЛУЧАЙНАЯ_СТРОКА"
+/container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/config/set registry-url=https://registry-1.docker.io tmpdir=disk1/tmp
-/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin root-dir=disk1/awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/config/set registry-url=https://registry-1.docker.io
+/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Дождитесь состояния `stopped`, затем запустите контейнер:
@@ -53,6 +53,8 @@ AWG Admin — веб-панель управления клиентами Amnezi
 ```
 
 Панель слушает TCP-порт `8080` по адресу контейнера. Публикацию порта, firewall и способ доступа пользователь настраивает самостоятельно. `AWG_CLIENT_ENDPOINT` используется только при генерации клиентских конфигов и не проверяется на доступность.
+
+`SESSION_SECRET` генерируется командой RouterOS один раз и сохраняется в envlist. Поэтому активные сессии панели сохраняются после перезапуска контейнера. `root-dir`, `layer-dir` и `tmpdir` в базовом примере не задаются; при необходимости пользователь может самостоятельно перенести контейнер на выбранный накопитель.
 
 Если AWG-контейнер называется не `wg-awg-server-1`, добавьте `AWG_CONTAINER_NAME`. Полный справочник находится в [описании переменных окружения](docs/ENVIRONMENT_RU.md).
 

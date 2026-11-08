@@ -69,6 +69,8 @@ class Settings:
         username = os.getenv("MIKROTIK_USERNAME", "").strip()
         password = os.getenv("MIKROTIK_PASSWORD", "")
         endpoint = os.getenv("AWG_CLIENT_ENDPOINT", "").strip()
+        auth_disable = env_bool("AUTH_DISABLE", False)
+        session_secret = os.getenv("SESSION_SECRET", "").strip()
         missing = [
             name
             for name, value in (
@@ -79,6 +81,8 @@ class Settings:
             )
             if not value
         ]
+        if not auth_disable and not session_secret:
+            missing.append("SESSION_SECRET")
         if missing:
             raise SettingsError("Missing required environment variables: " + ", ".join(missing))
 
@@ -119,18 +123,18 @@ class Settings:
             awg_server_name=os.getenv("AWG_SERVER_NAME", "AWG Server").strip() or "AWG Server",
             admin_username=admin_username,
             admin_password=admin_password,
-            auth_disable=env_bool("AUTH_DISABLE", False),
+            auth_disable=auth_disable,
             cookie_secure=env_bool("COOKIE_SECURE", False),
-            session_secret=os.getenv("SESSION_SECRET", "") or secrets.token_urlsafe(48),
+            session_secret=session_secret or secrets.token_urlsafe(48),
             default_lang=lang,
             default_theme=theme,
             client_default_keepalive=env_int("CLIENT_DEFAULT_KEEPALIVE", 30, 0, 65535),
-            client_default_dns=os.getenv("CLIENT_DEFAULT_DNS", "").strip(),
+            client_default_dns=os.getenv("CLIENT_DEFAULT_DNS", "1.1.1.1,8.8.8.8").strip(),
             client_default_allowed_ips=os.getenv(
                 "CLIENT_DEFAULT_ALLOWED_IPS", "0.0.0.0/0,::/0"
             ).strip(),
             app_version=os.getenv("AWG_ADMIN_VERSION", "dev").strip() or "dev",
-            log_level=os.getenv("LOG_LEVEL", "INFO").strip().upper() or "INFO",
+            log_level=os.getenv("LOG_LEVEL", "ERROR").strip().upper() or "ERROR",
             locales_dir=os.getenv("LOCALES_DIR", "/app/locales").strip() or "/app/locales",
         )
 

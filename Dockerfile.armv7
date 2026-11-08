@@ -7,15 +7,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     AWG_ADMIN_VERSION=${AWG_ADMIN_VERSION} \
     LOCALES_DIR=/app/locales \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=ERROR
 
 WORKDIR /app
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY app /app/app
 COPY locales /app/locales
-RUN MIKROTIK_HOST=127.0.0.1 MIKROTIK_USERNAME=build MIKROTIK_PASSWORD=build AWG_CLIENT_ENDPOINT=127.0.0.1:51820 python -c "from app.main import app; print(app.title)"
+RUN MIKROTIK_HOST=127.0.0.1 MIKROTIK_USERNAME=build MIKROTIK_PASSWORD=build AWG_CLIENT_ENDPOINT=127.0.0.1:51820 SESSION_SECRET=build-only-secret python -c "from app.main import app; print(app.title)"
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD wget -q -T 3 -O- http://127.0.0.1:8080/healthz >/dev/null
-CMD ["sh", "-c", "LOG_LEVEL_LOWER=$(printf '%s' \"${LOG_LEVEL:-INFO}\" | tr '[:upper:]' '[:lower:]'); exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --log-level \"$LOG_LEVEL_LOWER\" --no-access-log"]
+CMD ["sh", "-c", "LOG_LEVEL_LOWER=$(printf '%s' \"${LOG_LEVEL:-ERROR}\" | tr '[:upper:]' '[:lower:]'); exec uvicorn app.main:app --host 0.0.0.0 --port 8080 --log-level \"$LOG_LEVEL_LOWER\" --no-access-log"]

@@ -136,14 +136,30 @@ def test_settings_defaults_and_validation(monkeypatch):
     monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     settings = Settings.from_env()
     assert settings.mikrotik_api_port == 8728
     assert settings.admin_username == "admin"
     assert settings.admin_password == "admin"
     assert settings.awg_container_name == "wg-awg-server-1"
+    assert settings.client_default_dns == "1.1.1.1,8.8.8.8"
+    assert settings.log_level == "ERROR"
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "invalid")
     with pytest.raises(SettingsError):
         Settings.from_env()
+
+
+def test_session_secret_is_required_only_when_auth_is_enabled(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+    monkeypatch.delenv("AUTH_DISABLE", raising=False)
+    with pytest.raises(SettingsError, match="SESSION_SECRET"):
+        Settings.from_env()
+    monkeypatch.setenv("AUTH_DISABLE", "yes")
+    assert Settings.from_env().auth_disable is True
 
 
 def test_service_discovers_proxy_interface_and_address_pool(monkeypatch):
@@ -151,6 +167,7 @@ def test_service_discovers_proxy_interface_and_address_pool(monkeypatch):
     monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     service = AwgAdminService(Settings.from_env(), FakeRouterOS())
     service.startup_validate()
     dashboard = service.dashboard()

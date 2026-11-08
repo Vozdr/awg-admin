@@ -25,14 +25,14 @@ Create a dedicated group and user. AWG Admin needs only `read`, `write`, `sensit
 
 ```routeros
 /user/group/add name=awg-admin policy=read,write,sensitive,api
-/user/add name=awg-admin group=awg-admin password="CHANGE_ME" address=172.17.0.3/32
+/user/add name=awg-admin group=awg-admin password="CHANGE_ME" address=172.17.0.2/32
 ```
 
-The example assumes an existing container bridge, veth address `172.17.0.3`, and a disk named `disk1`:
+The panel uses a dedicated veth without a bridge. MikroTik uses `172.17.0.1` on this network and the container uses `172.17.0.2`:
 
 ```routeros
-/interface/veth/add name=veth-awg-admin address=172.17.0.3/24 gateway=172.17.0.1
-/interface/bridge/port/add bridge=containers interface=veth-awg-admin
+/interface/veth/add name=veth-awg-admin address=172.17.0.2/24 gateway=172.17.0.1
+/ip/address/add address=172.17.0.1/24 interface=veth-awg-admin
 
 /container/envs/add list=awg-admin key=MIKROTIK_HOST value=172.17.0.1
 /container/envs/add list=awg-admin key=MIKROTIK_USERNAME value=awg-admin
@@ -40,10 +40,10 @@ The example assumes an existing container bridge, veth address `172.17.0.3`, and
 /container/envs/add list=awg-admin key=AWG_CLIENT_ENDPOINT value=vpn.example.org:51820
 /container/envs/add list=awg-admin key=ADMIN_USERNAME value=admin
 /container/envs/add list=awg-admin key=ADMIN_PASSWORD value="CHANGE_PANEL_PASSWORD"
-/container/envs/add list=awg-admin key=SESSION_SECRET value="A_LONG_RANDOM_STRING"
+/container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/config/set registry-url=https://registry-1.docker.io tmpdir=disk1/tmp
-/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin root-dir=disk1/awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/config/set registry-url=https://registry-1.docker.io
+/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Wait until the container is `stopped`, then start it:
@@ -53,6 +53,8 @@ Wait until the container is `stopped`, then start it:
 ```
 
 The panel listens on TCP port `8080` at the container address. Port publishing, firewall policy, and the access path are intentionally left to the user. `AWG_CLIENT_ENDPOINT` is used only to generate client configurations and is never probed.
+
+RouterOS generates `SESSION_SECRET` once and stores it in the envlist, so active panel sessions survive container restarts. The basic example does not set `root-dir`, `layer-dir`, or `tmpdir`; users can place the container on a storage device of their choice when needed.
 
 Set `AWG_CONTAINER_NAME` when the proxy container is not named `wg-awg-server-1`. See the [environment reference](docs/ENVIRONMENT_EN.md) for every option.
 
