@@ -47,41 +47,60 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
-          push: true
-          tags: w03zd8rc/awg-admin:build-${{ github.sha }}-${{ matrix.arch }}
+          outputs: type=image,name=w03zd8rc/awg-admin,push-by-digest=true,name-canonical=true,push=true
           build-args: AWG_ADMIN_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.sha }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      - name: Export digest
+        shell: bash
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
 
   manifest:
     name: Publish multi-architecture image
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-*
+          path: /tmp/digests
+          merge-multiple: true
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish latest
-        run: >-
-          docker buildx imagetools create
-          --tag w03zd8rc/awg-admin:latest
-          w03zd8rc/awg-admin:build-${{ github.sha }}-amd64
-          w03zd8rc/awg-admin:build-${{ github.sha }}-arm64
-          w03zd8rc/awg-admin:build-${{ github.sha }}-armv7
+        shell: bash
+        run: |
+          images=()
+          for digest in /tmp/digests/*; do
+            images+=("w03zd8rc/awg-admin@sha256:$(basename "$digest")")
+          done
+          docker buildx imagetools create --tag w03zd8rc/awg-admin:latest "${images[@]}"
       - name: Publish version tag
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           VERSION: ${{ github.ref_name }}
-        run: >-
-          docker buildx imagetools create
-          --tag w03zd8rc/awg-admin:${VERSION#v}
-          w03zd8rc/awg-admin:build-${{ github.sha }}-amd64
-          w03zd8rc/awg-admin:build-${{ github.sha }}-arm64
-          w03zd8rc/awg-admin:build-${{ github.sha }}-armv7
+        shell: bash
+        run: |
+          images=()
+          for digest in /tmp/digests/*; do
+            images+=("w03zd8rc/awg-admin@sha256:$(basename "$digest")")
+          done
+          docker buildx imagetools create --tag "w03zd8rc/awg-admin:${VERSION#v}" "${images[@]}"
