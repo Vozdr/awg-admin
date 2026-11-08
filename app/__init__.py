@@ -1,0 +1,2 @@
+"""AWG Admin application package."""
+

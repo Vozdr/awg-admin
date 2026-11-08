@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="__DEFAULT_LANG__" data-theme="__DEFAULT_THEME__">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AWG Admin</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <div class="brand-mark">A</div>
+    <h1>AWG Admin</h1>
+    <p data-i18n="login.subtitle">MikroTik AmneziaWG management</p>
+    __LOGIN_ERROR__
+    <form method="post" action="/login" autocomplete="on">
+      <label><span data-i18n="login.username">Username</span><input name="username" autocomplete="username" required autofocus></label>
+      <label><span data-i18n="login.password">Password</span><input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="primary full" type="submit" data-i18n="login.submit">Sign in</button>
+    </form>
+    <div class="login-controls">
+      <select id="languageSelect" aria-label="Language"></select>
+      <button type="button" class="icon-button" id="themeToggle" aria-label="Theme">◐</button>
+    </div>
+  </main>
+  <script>window.AWG_BOOT={lang:"__DEFAULT_LANG__",theme:"__DEFAULT_THEME__",login:true};</script>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
