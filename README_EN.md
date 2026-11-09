@@ -2,7 +2,7 @@
 
 [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
-AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container, image `ghcr.io/timbrs/awg-proxy`, and talks directly to RouterOS through API or API-SSL.
+AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 
 The panel has no database or local configuration files. Clients, comments, addresses, keys, and statistics are read directly from MikroTik. Public peer keys are synchronized with the proxy container's `AWG_CLIENT_PUBS` variable.
 
