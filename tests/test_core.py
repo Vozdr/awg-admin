@@ -18,9 +18,11 @@ from app.services import (
     build_awg_config,
     clean_comment_metadata,
     comment_with_disabled_at,
+    generate_wireguard_key_pair,
     make_vpn_uri,
     parse_conf,
     qr_data_url,
+    wireguard_public_key,
 )
 from app.settings import Settings, SettingsError
 
@@ -89,6 +91,23 @@ class FakeCustomContainerNameRouterOS(FakeRouterOS):
         return super().print(menu, proplist)
 
 
+class FakeClientConfigRouterOS(FakeRouterOS):
+    def __init__(self, private_key="client-private"):
+        super().__init__()
+        self.private_key = private_key
+
+    def command(self, path, attributes=None):
+        assert path == "/interface/wireguard/peers/show-client-config"
+        return [{"conf": f"""[Interface]
+PrivateKey = {self.private_key}
+Address = 192.0.2.99/24
+ListenPort = 51820
+
+[Peer]
+PublicKey = incorrect-server-key
+"""}]
+
+
 @pytest.mark.parametrize("value", [0, 1, 127, 128, 16383, 16384, 0x1FFFFF, 0x200000, 0x0FFFFFFF, 0x10000000])
 def test_routeros_length_roundtrip(value):
     payload = bytearray(encode_length(value))
@@ -140,9 +159,23 @@ def sample_env():
 
 
 def test_build_config_and_vpn_uri_are_recoverable():
-    config = build_awg_config(sample_plain_config(), sample_env(), "vpn.example.org:51820")
+    config = build_awg_config(
+        "client-private",
+        {
+            "client-address": "10.8.1.3/32",
+            "client-dns": "1.1.1.1, 8.8.8.8",
+            "client-allowed-address": "0.0.0.0/0, ::/0",
+            "client-keepalive": "30s",
+            "preshared-key": "shared-secret",
+        },
+        {"public-key": "server-public", "mtu": "1420"},
+        sample_env(),
+        "vpn.example.org:51820",
+    )
     parsed = parse_conf(config)
     assert parsed["Interface"]["Jc"] == "7"
+    assert parsed["Interface"]["Address"] == "10.8.1.3/32"
+    assert "ListenPort" not in parsed["Interface"]
     assert parsed["Peer"]["Endpoint"] == "vpn.example.org:51820"
     assert parsed["Peer"]["PresharedKey"] == "shared-secret"
 
@@ -158,6 +191,18 @@ def test_build_config_and_vpn_uri_are_recoverable():
     assert inner["client_priv_key"] == "client-private"
     assert inner["psk_key"] == "shared-secret"
     assert inner["port"] == 51820
+
+
+def test_generated_wireguard_key_pair_is_valid():
+    private_key, public_key = generate_wireguard_key_pair()
+    assert len(base64.b64decode(private_key)) == 32
+    assert len(base64.b64decode(public_key)) == 32
+
+
+def test_x25519_public_key_matches_rfc_7748_vector():
+    private_key = base64.b64encode(bytes.fromhex("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")).decode()
+    expected = bytes.fromhex("8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a")
+    assert base64.b64decode(wireguard_public_key(private_key)) == expected
 
 
 def test_svg_qr_does_not_require_pillow():
@@ -231,6 +276,32 @@ def test_service_combines_multiple_container_envlists(monkeypatch):
     assert context.envlists == ["awg-base", "awg-clients"]
     assert context.env["AWG_MODE"] == "server"
     assert context.env["AWG_CLIENT_PUBS"] == "client-public"
+
+
+def test_service_uses_only_private_key_from_show_client_config(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    result = AwgAdminService(Settings.from_env(), FakeClientConfigRouterOS()).client_config("*4")
+    parsed = parse_conf(result["config"])
+    assert parsed["Interface"]["PrivateKey"] == "client-private"
+    assert parsed["Interface"]["Address"] == "192.168.177.2/32"
+    assert "ListenPort" not in parsed["Interface"]
+    assert parsed["Peer"]["PublicKey"] == "server-public"
+
+
+def test_missing_private_key_produces_warning_and_empty_config_field(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    service = AwgAdminService(Settings.from_env(), FakeClientConfigRouterOS("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="))
+    result = service.client_config("*4")
+    assert result["private_key_missing"] is True
+    assert "PrivateKey = \n" in result["config"]
 
 
 def test_custom_awg_container_name_is_used(monkeypatch):

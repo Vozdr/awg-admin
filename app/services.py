@@ -6,6 +6,7 @@ import io
 import json
 import logging
 import re
+import secrets
 import struct
 import threading
 import time
@@ -77,6 +78,7 @@ AWG_ENV_TO_CONFIG = {
 }
 
 METADATA_RE = re.compile(r"\s*\[awg-admin:v1(?:;disabled_at=([^\]]+))?\]\s*$")
+MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
 
 
 @dataclass
@@ -117,6 +119,11 @@ def split_values(value: str) -> list[str]:
     return [item for item in re.split(r"[,\s]+", value or "") if item]
 
 
+def normalize_seconds(value: str | int) -> int:
+    match = re.search(r"\d+", str(value or "0"))
+    return int(match.group(0)) if match else 0
+
+
 def format_bytes(raw: str) -> str:
     try:
         value = int(raw or 0)
@@ -138,6 +145,76 @@ def qr_data_url(text: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
 
 
+def decode_wireguard_key(value: str, field: str, allow_empty: bool = False) -> bytes:
+    if allow_empty and not value:
+        return b""
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except Exception as exc:
+        raise AppError(
+            "CLIENT_KEY_INVALID",
+            "error.clientKeyInvalid",
+            technical=f"{field} is not valid base64",
+            status_code=422,
+        ) from exc
+    if len(raw) != 32:
+        raise AppError(
+            "CLIENT_KEY_INVALID",
+            "error.clientKeyInvalid",
+            technical=f"{field} must contain 32 bytes",
+            status_code=422,
+        )
+    return raw
+
+
+def wireguard_public_key(private_key: str) -> str:
+    scalar = bytearray(decode_wireguard_key(private_key, "PrivateKey"))
+    scalar[0] &= 248
+    scalar[31] &= 127
+    scalar[31] |= 64
+    value = int.from_bytes(scalar, "little")
+    x_1 = 9
+    x_2, z_2 = 1, 0
+    x_3, z_3 = 9, 1
+    swap = 0
+    prime = 2**255 - 19
+    a24 = 121665
+    for position in range(254, -1, -1):
+        bit = (value >> position) & 1
+        swap ^= bit
+        if swap:
+            x_2, x_3 = x_3, x_2
+            z_2, z_3 = z_3, z_2
+        swap = bit
+        a = (x_2 + z_2) % prime
+        aa = (a * a) % prime
+        b = (x_2 - z_2) % prime
+        bb = (b * b) % prime
+        e = (aa - bb) % prime
+        c = (x_3 + z_3) % prime
+        d = (x_3 - z_3) % prime
+        da = (d * a) % prime
+        cb = (c * b) % prime
+        x_3 = ((da + cb) ** 2) % prime
+        z_3 = (x_1 * ((da - cb) ** 2)) % prime
+        x_2 = (aa * bb) % prime
+        z_2 = (e * (aa + a24 * e)) % prime
+    if swap:
+        x_2, x_3 = x_3, x_2
+        z_2, z_3 = z_3, z_2
+    public = (x_2 * pow(z_2, prime - 2, prime)) % prime
+    return base64.b64encode(public.to_bytes(32, "little")).decode("ascii")
+
+
+def generate_wireguard_key_pair() -> tuple[str, str]:
+    private = bytearray(secrets.token_bytes(32))
+    private[0] &= 248
+    private[31] &= 127
+    private[31] |= 64
+    private_key = base64.b64encode(bytes(private)).decode("ascii")
+    return private_key, wireguard_public_key(private_key)
+
+
 def parse_conf(text: str) -> dict[str, dict[str, str]]:
     result: dict[str, dict[str, str]] = {}
     section = ""
@@ -155,36 +232,44 @@ def parse_conf(text: str) -> dict[str, dict[str, str]]:
     return result
 
 
-def build_awg_config(plain_config: str, env: dict[str, str], endpoint: str) -> str:
-    parsed = parse_conf(plain_config)
-    interface = dict(parsed.get("Interface", {}))
-    peer = dict(parsed.get("Peer", {}))
-    if not interface.get("PrivateKey"):
+def build_awg_config(
+    private_key: str,
+    peer_record: dict[str, str],
+    wireguard: dict[str, str],
+    env: dict[str, str],
+    endpoint: str,
+) -> str:
+    server_public_key = wireguard.get("public-key", "")
+    if not server_public_key:
         raise AppError(
             "CLIENT_CONFIG_INVALID",
             "error.clientConfigInvalid",
-            technical="RouterOS client config does not contain Interface.PrivateKey",
+            technical="WireGuard interface does not contain public-key",
             status_code=502,
         )
-    if not peer.get("PublicKey"):
-        raise AppError(
-            "CLIENT_CONFIG_INVALID",
-            "error.clientConfigInvalid",
-            technical="RouterOS client config does not contain Peer.PublicKey",
-            status_code=502,
-        )
+    interface = {
+        "PrivateKey": private_key,
+        "Address": peer_record.get("allowed-address", "") or peer_record.get("client-address", ""),
+        "DNS": peer_record.get("client-dns", ""),
+        "MTU": wireguard.get("mtu", ""),
+    }
     for env_key, config_key in AWG_ENV_TO_CONFIG.items():
         value = env.get(env_key, "").strip()
         if value:
             interface[config_key] = value
-    peer["Endpoint"] = endpoint
+    peer = {
+        "PublicKey": server_public_key,
+        "PresharedKey": "" if peer_record.get("preshared-key", "").lower() == "none" else peer_record.get("preshared-key", ""),
+        "Endpoint": endpoint,
+        "AllowedIPs": peer_record.get("client-allowed-address", "") or "0.0.0.0/0,::/0",
+        "PersistentKeepalive": str(normalize_seconds(peer_record.get("client-keepalive", "") or "0")),
+    }
 
     interface_order = [
         "PrivateKey",
         "Address",
         "DNS",
         "MTU",
-        "ListenPort",
         "Jc",
         "Jmin",
         "Jmax",
@@ -217,7 +302,7 @@ def build_awg_config(plain_config: str, env: dict[str, str], endpoint: str) -> s
         lines: list[str] = []
         emitted: set[str] = set()
         for key in order:
-            if key in values and values[key] != "":
+            if key in values and (values[key] != "" or key == "PrivateKey"):
                 lines.append(f"{key} = {values[key]}")
                 emitted.add(key)
         for key, value in values.items():
@@ -429,14 +514,14 @@ class AwgAdminService:
                         "interface",
                         "disabled",
                         "public-key",
+                        "private-key",
+                        "preshared-key",
                         "allowed-address",
                         "client-address",
                         "client-dns",
                         "client-allowed-address",
                         "client-keepalive",
                         "persistent-keepalive",
-                        "current-endpoint-address",
-                        "current-endpoint-port",
                         "last-handshake",
                         "rx",
                         "tx",
@@ -538,7 +623,7 @@ class AwgAdminService:
 
     def _peer_payload(self, peer: dict[str, str]) -> dict[str, Any]:
         comment, disabled_at = clean_comment_metadata(peer.get("comment", ""))
-        client_address = peer.get("client-address", "") or peer.get("allowed-address", "")
+        client_address = peer.get("allowed-address", "") or peer.get("client-address", "")
         return {
             "id": peer.get(".id", ""),
             "name": peer.get("name", "") or comment or peer.get("public-key", "")[:12],
@@ -551,9 +636,6 @@ class AwgAdminService:
             "dns": peer.get("client-dns", ""),
             "client_allowed_ips": peer.get("client-allowed-address", "") or "0.0.0.0/0,::/0",
             "keepalive": peer.get("client-keepalive", "") or peer.get("persistent-keepalive", "") or "0s",
-            "endpoint": ":".join(
-                filter(None, (peer.get("current-endpoint-address", ""), peer.get("current-endpoint-port", "")))
-            ),
             "last_handshake": peer.get("last-handshake", ""),
             "rx": peer.get("rx", "0"),
             "tx": peer.get("tx", "0"),
@@ -569,7 +651,7 @@ class AwgAdminService:
             "sync": self.sync_status(context),
             "server": {
                 "container_name": self.settings.awg_container_name,
-                "container_status": context.container.get("status", "unknown"),
+                "container_status": "running" if self._container_running(context.container) else "stopped",
                 "wireguard_interface": context.wireguard.get("name", ""),
                 "listen_port": context.wireguard.get("listen-port", ""),
                 "client_endpoint": self.settings.awg_client_endpoint,
@@ -666,33 +748,129 @@ class AwgAdminService:
             hint_key="error.proxyRestartFailedHint",
         )
 
+    @staticmethod
+    def generate_client_keys() -> dict[str, str]:
+        private_key, public_key = generate_wireguard_key_pair()
+        return {
+            "private_key": private_key,
+            "public_key": public_key,
+            "preshared_key": base64.b64encode(secrets.token_bytes(32)).decode("ascii"),
+        }
+
+    def _validated_keys(
+        self,
+        public_key: str,
+        store_private_key: bool,
+        private_key: str,
+        use_preshared_key: bool,
+        preshared_key: str,
+    ) -> tuple[str, str, str]:
+        public_key = public_key.strip()
+        decode_wireguard_key(public_key, "PublicKey")
+        private_key = private_key.strip() if store_private_key else ""
+        if private_key:
+            decode_wireguard_key(private_key, "PrivateKey")
+            if wireguard_public_key(private_key) != public_key:
+                raise AppError(
+                    "CLIENT_KEY_PAIR_MISMATCH",
+                    "error.clientKeyPairMismatch",
+                    technical="PublicKey does not match PrivateKey",
+                    status_code=422,
+                )
+        elif store_private_key:
+            raise AppError(
+                "CLIENT_KEY_INVALID",
+                "error.clientKeyInvalid",
+                technical="PrivateKey is empty while private key storage is enabled",
+                status_code=422,
+            )
+        preshared_key = preshared_key.strip() if use_preshared_key else ""
+        if preshared_key:
+            decode_wireguard_key(preshared_key, "PresharedKey")
+        elif use_preshared_key:
+            raise AppError(
+                "CLIENT_KEY_INVALID",
+                "error.clientKeyInvalid",
+                technical="PresharedKey is empty while preshared key is enabled",
+                status_code=422,
+            )
+        return public_key, private_key, preshared_key
+
+    def _address_values(
+        self,
+        context: ServerContext,
+        pool_cidr: str,
+        mode: str,
+        requested: str,
+        current_peer: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        if mode == "keep":
+            return {}
+        pool = next((item for item in self.pools(context) if item["cidr"] == pool_cidr), None)
+        if not pool:
+            raise AppError("ADDRESS_POOL_INVALID", "error.addressPoolInvalid", technical=pool_cidr, status_code=422)
+        network = ipaddress.ip_network(pool_cidr)
+        if mode == "next":
+            if not pool["available"]:
+                raise AppError("ADDRESS_POOL_EXHAUSTED", "error.poolExhausted", technical=pool_cidr, status_code=409)
+            address = ipaddress.ip_address(pool["free_address"])
+        else:
+            try:
+                address = ipaddress.ip_interface(requested.strip()).ip
+            except ValueError as exc:
+                raise AppError("ADDRESS_INVALID", "error.addressInvalid", technical=requested, status_code=422) from exc
+            if not isinstance(address, ipaddress.IPv4Address) or address not in network:
+                raise AppError("ADDRESS_INVALID", "error.addressInvalid", technical=f"{address} not in {network}", status_code=422)
+            if address in {network.network_address, network.broadcast_address}:
+                raise AppError("ADDRESS_INVALID", "error.addressInvalid", technical=f"reserved address {address}", status_code=422)
+            current_addresses: set[ipaddress._BaseAddress] = set()
+            if current_peer:
+                for field in ("allowed-address", "client-address"):
+                    for value in split_values(current_peer.get(field, "")):
+                        try:
+                            current_addresses.add(ipaddress.ip_interface(value).ip)
+                        except ValueError:
+                            pass
+            if address in self._used_addresses(context) and address not in current_addresses:
+                raise AppError("ADDRESS_IN_USE", "error.addressInUse", technical=str(address), status_code=409)
+        return {
+            "allowed-address": f"{address}/32",
+            "client-address": f"{address}/{network.prefixlen}",
+        }
+
     def create_client(self, data: ClientCreate) -> dict[str, Any]:
         with self.operation_lock:
             context = self.load_context(validate=True)
-            pool = next((item for item in self.pools(context) if item["cidr"] == data.pool), None)
-            if not pool or not pool["available"]:
-                raise AppError("ADDRESS_POOL_EXHAUSTED", "error.poolExhausted", technical=data.pool, status_code=409)
-            network = ipaddress.ip_network(data.pool)
-            address = ipaddress.ip_address(pool["free_address"])
-            if any((peer.get("name") or "").lower() == data.name.lower() for peer in context.peers):
+            if data.name and any((peer.get("name") or "").lower() == data.name.lower() for peer in context.peers):
                 raise AppError("CLIENT_NAME_EXISTS", "error.clientNameExists", technical=data.name, status_code=409)
+            public_key, private_key, preshared_key = self._validated_keys(
+                data.public_key,
+                data.store_private_key,
+                data.private_key,
+                data.use_preshared_key,
+                data.preshared_key,
+            )
             values: dict[str, object] = {
                 "interface": context.wireguard.get("name", ""),
-                "name": data.name,
                 "comment": data.comment,
-                "private-key": "auto",
-                "preshared-key": "auto" if data.use_preshared_key else "none",
-                "allowed-address": f"{address}/32",
-                "client-address": f"{address}/{network.prefixlen}",
+                "preshared-key": preshared_key or "none",
                 "client-dns": data.dns,
                 "client-allowed-address": data.allowed_ips,
                 "client-keepalive": f"{data.keepalive}s",
                 "responder": "yes",
             }
+            if private_key:
+                values["private-key"] = private_key
+            else:
+                values["private-key"] = "none"
+                values["public-key"] = public_key
+            if data.name:
+                values["name"] = data.name
+            values.update(self._address_values(context, data.pool, data.address_mode, data.address))
             peer_id = self.client.add(PEER_MENU, values)
             if not peer_id:
                 refreshed = self.load_context(validate=False)
-                peer = next((item for item in refreshed.peers if item.get("name") == data.name), None)
+                peer = next((item for item in refreshed.peers if item.get("public-key") == public_key), None)
                 peer_id = peer.get(".id", "") if peer else ""
             if not peer_id:
                 raise AppError("CLIENT_CREATE_FAILED", "error.clientCreateFailed", technical="RouterOS returned no peer id", status_code=502)
@@ -706,7 +884,7 @@ class AwgAdminService:
                 new_keys.add(peer["public-key"])
                 self._set_client_keys(refreshed, new_keys)
                 self._restart_proxy(refreshed)
-                LOGGER.info("client_added peer_id=%s name=%s", peer_id, data.name)
+                LOGGER.info("client_added peer_id=%s name=%s", peer_id, data.name or "(RouterOS generated)")
                 return self.client_config(peer_id)
             except Exception:
                 try:
@@ -729,27 +907,73 @@ class AwgAdminService:
         with self.operation_lock:
             context = self.load_context(validate=False)
             peer = self._find_peer(context, peer_id)
-            if any(
+            if data.name and any(
                 item.get(".id") != peer_id
                 and (item.get("name") or "").lower() == data.name.lower()
                 for item in context.peers
             ):
                 raise AppError("CLIENT_NAME_EXISTS", "error.clientNameExists", technical=data.name, status_code=409)
+            public_key, private_key, preshared_key = self._validated_keys(
+                data.public_key,
+                data.store_private_key,
+                data.private_key,
+                data.use_preshared_key,
+                data.preshared_key,
+            )
             _, disabled_at = clean_comment_metadata(peer.get("comment", ""))
             values: dict[str, object] = {
                 "name": data.name,
                 "comment": comment_with_disabled_at(data.comment, disabled_at or None),
+                "preshared-key": preshared_key or "none",
                 "client-dns": data.dns,
                 "client-allowed-address": data.allowed_ips,
                 "client-keepalive": f"{data.keepalive}s",
             }
-            if data.psk_action == "generate":
-                values["preshared-key"] = "auto"
-            elif data.psk_action == "remove":
-                values["preshared-key"] = "none"
+            if private_key:
+                values["private-key"] = private_key
+            else:
+                values["private-key"] = "none"
+                values["public-key"] = public_key
+            values.update(self._address_values(context, data.pool, data.address_mode, data.address, peer))
+            old_values = {
+                key: peer.get(key, "") or ("none" if key in {"private-key", "preshared-key"} else "")
+                for key in values
+            }
+            if not peer.get("private-key", "") or peer.get("private-key") == MISSING_PRIVATE_KEY:
+                old_values["private-key"] = "none"
+                old_values["public-key"] = peer.get("public-key", "")
+            old_public_key = peer.get("public-key", "")
+            old_env_keys = set(split_values(context.env.get("AWG_CLIENT_PUBS", "")))
             self.client.set(PEER_MENU, peer_id, values)
-            LOGGER.info("client_updated peer_id=%s name=%s psk_action=%s", peer_id, data.name, data.psk_action)
-            return {"ok": True}
+            try:
+                refreshed = self.load_context(validate=False)
+                updated_peer = self._find_peer(refreshed, peer_id)
+                actual_public_key = updated_peer.get("public-key", "")
+                if not actual_public_key:
+                    raise AppError(
+                        "CLIENT_UPDATE_FAILED",
+                        "error.clientUpdateFailed",
+                        technical="updated peer has no public key",
+                        status_code=502,
+                    )
+                if actual_public_key != old_public_key:
+                    new_env_keys = set(old_env_keys)
+                    new_env_keys.discard(old_public_key)
+                    new_env_keys.add(actual_public_key)
+                    self._set_client_keys(refreshed, new_env_keys)
+                    self._restart_proxy(refreshed)
+                LOGGER.info("client_updated peer_id=%s name=%s", peer_id, data.name or "(RouterOS generated)")
+                return {"ok": True}
+            except Exception:
+                try:
+                    rollback_context = self.load_context(validate=False)
+                    self.client.set(PEER_MENU, peer_id, old_values)
+                    self._set_client_keys(rollback_context, old_env_keys)
+                    self._restart_proxy(rollback_context)
+                    LOGGER.warning("client_update_rolled_back peer_id=%s", peer_id)
+                except Exception as rollback_error:
+                    LOGGER.exception("client_update_rollback_failed peer_id=%s error=%s", peer_id, rollback_error)
+                raise
 
     def toggle_client(self, peer_id: str, disabled: bool) -> dict[str, Any]:
         with self.operation_lock:
@@ -794,14 +1018,14 @@ class AwgAdminService:
             LOGGER.info("client_deleted peer_id=%s", peer_id)
             return {"ok": True}
 
-    def _plain_client_config(self, peer_id: str) -> str:
+    def _private_key_from_client_config(self, peer_id: str) -> str:
         records = self.client.command(
             "/interface/wireguard/peers/show-client-config", attributes={"number": peer_id}
         )
         for record in records:
             for key in ("conf", "ret", "config"):
                 if record.get(key):
-                    return record[key]
+                    return parse_conf(record[key]).get("Interface", {}).get("PrivateKey", "")
         raise AppError(
             "CLIENT_CONFIG_UNAVAILABLE",
             "error.clientConfigUnavailable",
@@ -810,11 +1034,35 @@ class AwgAdminService:
             hint_key="error.clientConfigUnavailableHint",
         )
 
+    def client_details(self, peer_id: str) -> dict[str, Any]:
+        context = self.load_context(validate=False)
+        peer = self._find_peer(context, peer_id)
+        private_key = peer.get("private-key", "") or self._private_key_from_client_config(peer_id)
+        if private_key == MISSING_PRIVATE_KEY or private_key.lower() == "none":
+            private_key = ""
+        preshared_key = peer.get("preshared-key", "")
+        if preshared_key.lower() == "none":
+            preshared_key = ""
+        return {
+            **self._peer_payload(peer),
+            "private_key": private_key,
+            "store_private_key": bool(private_key),
+            "preshared_key": preshared_key,
+            "use_preshared_key": bool(preshared_key),
+        }
+
     def client_config(self, peer_id: str) -> dict[str, Any]:
         context = self.load_context(validate=False)
         peer = self._find_peer(context, peer_id)
-        plain = self._plain_client_config(peer_id)
-        config = build_awg_config(plain, context.env, self.settings.awg_client_endpoint)
+        private_key = self._private_key_from_client_config(peer_id)
+        private_key_missing = not private_key or private_key == MISSING_PRIVATE_KEY
+        config = build_awg_config(
+            "" if private_key_missing else private_key,
+            peer,
+            context.wireguard,
+            context.env,
+            self.settings.awg_client_endpoint,
+        )
         vpn_uri = make_vpn_uri(config, context.env, self.settings.awg_server_name)
         return {
             "id": peer_id,
@@ -823,6 +1071,7 @@ class AwgAdminService:
             "qr": qr_data_url(config),
             "vpn_uri": vpn_uri,
             "vpn_qr": qr_data_url(vpn_uri),
+            "private_key_missing": private_key_missing,
         }
 
     def sync_preview(self) -> dict[str, Any]:

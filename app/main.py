@@ -255,6 +255,16 @@ async def client_config(peer_id: str, _: str = Depends(auth.require_auth)) -> di
     return await run_in_threadpool(service.client_config, peer_id)
 
 
+@app.get("/api/clients/{peer_id}")
+async def client_details(peer_id: str, _: str = Depends(auth.require_auth)) -> dict[str, Any]:
+    return await run_in_threadpool(service.client_details, peer_id)
+
+
+@app.get("/api/client-keys")
+async def client_keys(_: str = Depends(auth.require_auth)) -> dict[str, str]:
+    return service.generate_client_keys()
+
+
 @app.post("/api/clients")
 async def create_client(data: ClientCreate, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
     return await run_in_threadpool(service.create_client, data)

@@ -1,94 +1,50 @@
 <!doctype html>
 <html lang="__DEFAULT_LANG__" data-theme="__DEFAULT_THEME__">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>AWG Admin</title>
-  <link rel="stylesheet" href="/static/app.css">
-</head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AWG Admin</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-mark small">A</span><div><strong>AWG Admin</strong><small>v__APP_VERSION__</small></div></div>
-    <div class="top-actions">
-      <span class="connection-status" id="connectionStatus"><i></i><span data-i18n="status.loading">Loading</span></span>
-      <button class="button ghost" id="serverSettingsButton" data-i18n="server.openSettings">Server settings</button>
-      <select id="languageSelect" aria-label="Language"></select>
-      <button class="icon-button" id="themeToggle" aria-label="Theme">◐</button>
-      <a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a>
-    </div>
-  </header>
+  <header class="topbar"><div class="topbar-inner">
+    <div class="brand"><span class="brand-mark small">A</span><div><strong>AWG Admin</strong><button type="button" class="server-summary" id="serverSettingsButton"><span data-i18n="summary.server">AWG server</span>: <b id="serverName">—</b> · <span id="serverState">—</span></button></div></div>
+    <div class="top-actions"><span class="connection-status" id="connectionStatus"><i></i><span data-i18n="status.loading">Loading</span></span><select id="languageSelect" aria-label="Language"></select><button class="icon-button" id="themeToggle" aria-label="Theme">◐</button><a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a></div>
+  </div></header>
 
   <main class="shell">
     <section class="warning-banner hidden" id="authWarning" data-i18n="auth.disabledWarning">Authentication is disabled.</section>
-    <section class="warning-banner hidden" id="syncWarning">
-      <div><strong data-i18n="sync.title">Synchronization required</strong><span data-i18n="sync.message">WireGuard peers and proxy keys differ.</span></div>
-      <button class="button warning" id="syncButton" data-i18n="sync.action">Synchronize</button>
-    </section>
-    <section class="error-banner hidden" id="runtimeError">
-      <div><strong data-i18n="error.connectionTitle">Cannot load data</strong><span id="runtimeErrorText"></span></div>
-      <button class="button" id="retryButton" data-i18n="common.retry">Retry</button>
-    </section>
+    <section class="warning-banner hidden" id="syncWarning"><div><strong data-i18n="sync.title">Synchronization required</strong><span data-i18n="sync.message">WireGuard peers and proxy keys differ.</span></div><button class="button warning" id="syncButton" data-i18n="sync.action">Synchronize</button></section>
+    <section class="error-banner hidden" id="runtimeError"><div><strong data-i18n="error.connectionTitle">Cannot load data</strong><span id="runtimeErrorText"></span></div><button class="button" id="retryButton" data-i18n="common.retry">Retry</button></section>
 
-    <section class="summary-grid">
-      <article class="summary-card"><span data-i18n="summary.total">Clients</span><strong id="totalClients">—</strong></article>
-      <article class="summary-card"><span data-i18n="summary.active">Enabled</span><strong id="activeClients">—</strong></article>
-      <article class="summary-card"><span data-i18n="summary.disabled">Disabled</span><strong id="disabledClients">—</strong></article>
-      <article class="summary-card server-card"><span data-i18n="summary.server">Server</span><strong id="serverState">—</strong><small id="serverMeta"></small></article>
+    <section class="summary-grid" aria-label="Client filters">
+      <button class="summary-card active" type="button" data-filter="all"><strong id="totalClients">—</strong><span data-i18n="summary.total">Clients</span></button>
+      <button class="summary-card" type="button" data-filter="enabled"><strong id="activeClients">—</strong><span data-i18n="summary.active">Enabled</span></button>
+      <button class="summary-card" type="button" data-filter="disabled"><strong id="disabledClients">—</strong><span data-i18n="summary.disabled">Disabled</span></button>
     </section>
 
     <section class="panel">
-      <div class="panel-header">
-        <div><h1 data-i18n="clients.title">Clients</h1><p data-i18n="clients.subtitle">WireGuard peers managed on MikroTik</p></div>
-        <div class="panel-actions">
-          <label class="search"><span>⌕</span><input id="clientSearch" type="search" data-i18n-placeholder="clients.search" placeholder="Search"></label>
-          <button class="button ghost" id="refreshButton" data-i18n="common.refresh">Refresh</button>
-          <button class="button primary" id="addClientButton"><span>＋</span><span data-i18n="clients.add">Add client</span></button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>
-            <th data-i18n="clients.client">Client</th><th data-i18n="clients.address">Address</th><th data-i18n="clients.status">Status</th>
-            <th data-i18n="clients.handshake">Last handshake</th><th data-i18n="clients.traffic">Traffic</th><th data-i18n="clients.endpoint">Endpoint</th><th></th>
-          </tr></thead>
-          <tbody id="clientsBody"></tbody>
-        </table>
-        <div class="empty-state hidden" id="emptyState"><div>⌁</div><strong data-i18n="clients.empty">No clients yet</strong><span data-i18n="clients.emptyHint">Add the first client to generate a configuration.</span></div>
-      </div>
+      <div class="panel-header"><h1 data-i18n="clients.title">Clients</h1><label class="search"><span>⌕</span><input id="clientSearch" type="search" data-i18n-placeholder="clients.search" placeholder="Search"></label></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th class="sortable" data-sort="name"><span data-i18n="clients.client">Client</span><i></i></th><th class="sortable" data-sort="address"><span data-i18n="clients.address">Address</span><i></i></th><th class="sortable" data-sort="disabled"><span data-i18n="clients.status">Status</span><i></i></th><th class="sortable" data-sort="last_handshake"><span data-i18n="clients.handshake">Last handshake</span><i></i></th><th class="sortable" data-sort="rx"><span data-i18n="clients.traffic">Traffic</span><i></i></th><th></th>
+      </tr></thead><tbody id="clientsBody"></tbody></table><div class="empty-state hidden" id="emptyState"><div>⌁</div><strong id="emptyTitle"></strong><span id="emptyHint"></span></div></div>
     </section>
+
+    <div class="table-toolbar"><button class="button primary add-button" id="addClientButton"><span>＋</span><span data-i18n="clients.add">Add client</span></button><div class="refresh-controls"><label><span data-i18n="common.autoRefresh">Auto</span><select id="autoRefresh"><option value="0" data-i18n="common.off">Off</option><option value="5000">5 s</option><option value="15000">15 s</option><option value="30000">30 s</option><option value="60000">60 s</option></select></label><button class="icon-button" id="refreshButton" data-i18n-title="common.refresh" title="Refresh">↻</button><small id="updatedAt"></small></div></div>
+    <footer class="app-footer">Powered by: <a href="https://github.com/Vozdr/awg-admin" target="_blank" rel="noopener noreferrer">AWG Admin v__APP_VERSION__</a></footer>
   </main>
 
-  <dialog id="clientDialog" class="modal">
-    <form id="clientForm" method="dialog">
-      <header><div><h2 id="clientDialogTitle"></h2><p data-i18n="clientForm.subtitle">Client parameters stored in the MikroTik peer.</p></div><button type="button" class="close-button" data-close>×</button></header>
-      <div class="form-grid">
-        <label class="wide"><span data-i18n="clientForm.name">Name</span><input name="name" maxlength="64" required></label>
-        <label class="wide"><span data-i18n="clientForm.comment">Comment</span><input name="comment" maxlength="256"></label>
-        <label class="wide create-only"><span data-i18n="clientForm.pool">Issue an address from pool</span><select name="pool" id="poolSelect"></select><small data-i18n="clientForm.poolHint">The first free address will be selected automatically.</small></label>
-        <label><span data-i18n="clientForm.dns">DNS servers</span><input name="dns" placeholder="1.1.1.1, 8.8.8.8"></label>
-        <label><span data-i18n="clientForm.keepalive">Keepalive, sec.</span><input name="keepalive" type="number" min="0" max="65535" value="30" required></label>
-        <label class="wide"><span data-i18n="clientForm.allowedIps">Allowed IPs on client</span><input name="allowed_ips" value="0.0.0.0/0,::/0" required></label>
-        <label class="check-row create-only"><input name="use_preshared_key" type="checkbox" checked><span data-i18n="clientForm.usePsk">Generate a preshared key</span></label>
-        <label class="wide edit-only"><span data-i18n="clientForm.pskAction">Preshared key</span><select name="psk_action"><option value="keep" data-i18n="clientForm.pskKeep">Keep current</option><option value="generate" data-i18n="clientForm.pskGenerate">Generate new</option><option value="remove" data-i18n="clientForm.pskRemove">Remove</option></select></label>
-      </div>
-      <footer><button type="button" class="button ghost" data-close data-i18n="common.cancel">Cancel</button><button type="submit" class="button primary" id="clientSubmit"><span data-i18n="common.save">Save</span></button></footer>
-    </form>
-  </dialog>
+  <dialog id="clientDialog" class="modal client-modal"><form id="clientForm" method="dialog"><header><div><h2 id="clientDialogTitle"></h2><p data-i18n="clientForm.subtitle">Client parameters stored in the MikroTik peer.</p></div><button type="button" class="close-button" data-close>×</button></header>
+    <div class="form-grid">
+      <label class="wide"><span data-i18n="clientForm.name">Name</span><input name="name" maxlength="64"><small data-i18n="clientForm.nameHint">If empty, MikroTik assigns a name.</small></label>
+      <label class="wide"><span data-i18n="clientForm.comment">Comment</span><input name="comment" maxlength="256"></label>
+      <label><span data-i18n="clientForm.addressMode">Client address</span><select name="address_mode" id="addressMode"></select></label><label id="poolField"><span data-i18n="clientForm.pool">Pool</span><select name="pool" id="poolSelect"></select></label>
+      <label class="wide hidden" id="manualAddressField"><span data-i18n="clientForm.manualAddress">Address</span><input name="address" placeholder="10.8.1.10"><small data-i18n="clientForm.manualAddressHint">The address must belong to the selected pool and be free.</small></label>
+      <label><span data-i18n="clientForm.dns">DNS servers</span><input name="dns" placeholder="1.1.1.1, 8.8.8.8"></label><label><span data-i18n="clientForm.keepalive">Keepalive, sec.</span><input name="keepalive" type="number" min="0" max="65535" value="30" required></label>
+      <label class="wide"><span data-i18n="clientForm.allowedIps">Allowed IPs on client</span><input name="allowed_ips" value="0.0.0.0/0,::/0" required></label>
+      <fieldset class="wide key-group"><legend data-i18n="clientForm.keyPair">Client key pair</legend><div class="field-action"><label><span data-i18n="clientForm.publicKey">Public key</span><input name="public_key" autocomplete="off" required></label><button type="button" class="button ghost" id="generateKeyPair" data-i18n="clientForm.generatePair">Generate pair</button></div><label><span data-i18n="clientForm.privateKey">Private key</span><input name="private_key" autocomplete="off"></label><label class="check-row"><input name="store_private_key" type="checkbox" checked><span data-i18n="clientForm.storePrivateKey">Store private key in MikroTik</span></label></fieldset>
+      <fieldset class="wide key-group"><legend data-i18n="clientForm.psk">PresharedKey</legend><label class="check-row"><input name="use_preshared_key" type="checkbox" checked><span data-i18n="clientForm.usePsk">Use PresharedKey</span></label><div class="field-action"><label><input name="preshared_key" autocomplete="off"></label><button type="button" class="icon-button" id="generatePsk" data-i18n-title="clientForm.generatePsk" title="Generate">↻</button></div></fieldset>
+    </div><footer><button type="button" class="button ghost" data-close data-i18n="common.cancel">Cancel</button><button type="submit" class="button primary" id="clientSubmit"><span data-i18n="common.save">Save</span></button></footer></form></dialog>
 
-  <dialog id="configDialog" class="modal config-modal">
-    <div><header><div><h2 id="configTitle"></h2><p data-i18n="config.subtitle">Use either AmneziaWG config or an Amnezia VPN link.</p></div><button type="button" class="close-button" data-close>×</button></header>
-      <div class="tabs"><button class="active" data-tab="awg" data-i18n="config.awgTab">AmneziaWG</button><button data-tab="vpn" data-i18n="config.vpnTab">Amnezia VPN</button></div>
-      <section class="config-content active" data-tab-content="awg"><img id="configQr" class="qr" alt="QR"><textarea id="configText" readonly></textarea><div class="config-actions"><button class="button ghost" id="copyConfig" data-i18n="common.copy">Copy</button><button class="button primary" id="downloadConfig" data-i18n="config.download">Download .conf</button></div></section>
-      <section class="config-content" data-tab-content="vpn"><img id="vpnQr" class="qr" alt="QR"><textarea id="vpnText" readonly></textarea><div class="config-actions"><button class="button primary" id="copyVpn" data-i18n="common.copy">Copy link</button></div></section>
-    </div>
-  </dialog>
+  <dialog id="configDialog" class="modal config-modal"><div><header><div><h2 id="configTitle"></h2><p data-i18n="config.subtitle">Use either AmneziaWG config or an Amnezia VPN link.</p></div><button type="button" class="close-button" data-close>×</button></header><div class="config-warning hidden" id="configWarning" data-i18n="config.privateKeyMissing">The private key is not stored in this peer. Enter it manually before use.</div><div class="tabs"><button class="active" data-tab="awg" data-i18n="config.awgTab">AmneziaWG config</button><button data-tab="vpn" data-i18n="config.vpnTab">Amnezia VPN link</button></div><section class="config-content active" data-tab-content="awg"><div class="qr-block"><img id="configQr" class="qr" alt="QR"><small data-i18n="config.awgQrHint">This QR contains the configuration text.</small></div><textarea id="configText" readonly></textarea><div class="config-actions"><button class="button ghost" id="copyConfig" data-i18n="common.copy">Copy</button><button class="button primary" id="downloadConfig" data-i18n="config.download">Download .conf</button></div></section><section class="config-content" data-tab-content="vpn"><div class="qr-block"><img id="vpnQr" class="qr" alt="QR"><small data-i18n="config.vpnQrHint">This QR contains a vpn:// import link.</small></div><textarea id="vpnText" readonly></textarea><div class="config-actions"><button class="button primary" id="copyVpn" data-i18n="common.copy">Copy link</button></div></section></div></dialog>
 
   <dialog id="serverDialog" class="modal server-modal"><div><header><div><h2 data-i18n="server.title">Server settings</h2><p data-i18n="server.subtitle">Current MikroTik and AWG proxy parameters.</p></div><button type="button" class="close-button" data-close>×</button></header><div class="settings-list" id="settingsList"></div><footer><span data-i18n="server.readOnly">Editing will be added in a future version.</span><button class="button primary" data-close data-i18n="common.close">Close</button></footer></div></dialog>
-
   <dialog id="confirmDialog" class="modal confirm-modal"><form method="dialog"><header><div><h2 id="confirmTitle"></h2><p id="confirmMessage"></p></div></header><footer><button class="button ghost" value="cancel" data-i18n="common.cancel">Cancel</button><button class="button danger" value="confirm" id="confirmAction" data-i18n="common.confirm">Confirm</button></footer></form></dialog>
   <dialog id="errorDialog" class="modal error-modal"><div><header><div><h2 data-i18n="error.title">Operation failed</h2><p id="errorMessage"></p></div><button type="button" class="close-button" data-close>×</button></header><details><summary data-i18n="error.technical">Technical details</summary><pre id="errorTechnical"></pre></details><footer><span id="errorRequestId"></span><button class="button primary" data-close data-i18n="common.close">Close</button></footer></div></dialog>
-  <div id="toast" class="toast" role="status"></div>
-  <script>window.AWG_BOOT={lang:"__DEFAULT_LANG__",theme:"__DEFAULT_THEME__",authDisabled:__AUTH_DISABLED__,login:false};</script>
-  <script src="/static/app.js" defer></script>
-</body>
-</html>
+  <div id="toast" class="toast" role="status"></div><script>window.AWG_BOOT={lang:"__DEFAULT_LANG__",theme:"__DEFAULT_THEME__",authDisabled:__AUTH_DISABLED__,login:false};</script><script src="/static/app.js" defer></script>
+</body></html>
