@@ -96,7 +96,8 @@ async function synchronize(button) { let preview; await withBusy(button,async()=
 async function openServerSettings() {
   const data=await api("/api/server/settings"); let section="";
   $("#settingsList").innerHTML=data.settings.map(item=>{
-    const heading=item.section!==section?`<div class="settings-section">${escapeHtml(t(`serverSettings.section.${item.section}`))}</div>`:"";
+    const sectionWarning=item.section==="environment"?`<small class="settings-section-warning">${escapeHtml(t("serverSettings.environmentWarning"))}</small>`:"";
+    const heading=item.section!==section?`<div class="settings-section"><strong>${escapeHtml(t(`serverSettings.section.${item.section}`))}</strong>${sectionWarning}</div>`:"";
     section=item.section;
     const description=item.description_key?`<small>${escapeHtml(t(item.description_key))}</small>`:"";
     const managed=item.managed?`<small class="managed-badge">${escapeHtml(t("serverSettings.managed"))}</small>`:"";
