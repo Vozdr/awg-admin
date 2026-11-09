@@ -41,6 +41,15 @@ jobs:
             dockerfile: Dockerfile.armv7
     steps:
       - uses: actions/checkout@v4
+      - id: version
+        name: Resolve application version
+        shell: bash
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -54,7 +63,7 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=w03zd8rc/awg-admin,push-by-digest=true,name-canonical=true,push=true
-          build-args: AWG_ADMIN_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || github.sha }}
+          build-args: AWG_ADMIN_VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
       - name: Export digest
