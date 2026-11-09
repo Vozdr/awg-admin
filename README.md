@@ -19,7 +19,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 
 ## Быстрый запуск на MikroTik
 
-Требуются RouterOS v7 с пакетом Container, уже работающий `awg-proxy` в режиме сервера и доступный сервис `api` либо `api-ssl`.
+Требуются RouterOS v7 с пакетом Container, настроенный `awg-proxy` в режиме сервера и доступный сервис `api` либо `api-ssl`. AWG-контейнер может быть остановлен — это не мешает работе панели.
 
 Создайте отдельную группу и пользователя. Панели нужны только `read`, `write`, `sensitive` и `api`:
 
@@ -43,7 +43,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 /container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
 /container/config/set registry-url=https://registry-1.docker.io
-/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Дождитесь состояния `stopped`, затем запустите контейнер:
@@ -54,7 +54,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 
 Панель слушает TCP-порт `8080` по адресу контейнера. `AWG_CLIENT_ENDPOINT` используется только при генерации клиентских конфигов и не проверяется на доступность.
 
-`SESSION_SECRET` генерируется командой RouterOS один раз и сохраняется в envlist. Поэтому активные сессии панели сохраняются после перезапуска контейнера.
+`SESSION_SECRET` генерируется командой RouterOS один раз и сохраняется в списке переменных окружения. Поэтому активные сессии панели сохраняются после перезапуска контейнера.
 
 Если AWG-контейнер называется не `wg-awg-server-1`, добавьте `AWG_CONTAINER_NAME`. Полный справочник находится в [описании переменных окружения](docs/ENVIRONMENT_RU.md).
 

@@ -27,6 +27,7 @@ from .settings import Settings, SettingsError
 APP_DIR = Path(__file__).resolve().parent
 TEMPLATE_DIR = APP_DIR / "templates"
 STATIC_DIR = APP_DIR / "static"
+STARTUP_CHECKS_COMPLETED = False
 
 try:
     settings = Settings.from_env()
@@ -59,23 +60,24 @@ async def lifespan(_: FastAPI):
     print("https://github.com/Vozdr/awg-admin", flush=True)
     for key, value in settings.safe_startup_values():
         print(f"AWG_ADMIN: {key}={value}", flush=True)
-    locales.validate_required()
     if settings.auth_disable:
         LOGGER.error(
             "AUTH_DISABLED: authentication to the admin panel is disabled. Remove AUTH_DISABLE from env to secure the panel."
         )
     elif settings.admin_username == "admin" and settings.admin_password == "admin":
         LOGGER.error("DEFAULT_CREDENTIALS: admin panel uses default credentials admin/admin")
-    try:
-        await run_in_threadpool(service.startup_validate)
-        LOGGER.info("Startup validation completed successfully")
-    except AppError as exc:
-        if exc.code == "MIKROTIK_PERMISSION_DENIED":
-            service.runtime_error = exc
-            LOGGER.error("Startup permission check failed; diagnostic UI remains available: %s", exc.technical)
-        else:
-            LOGGER.error("Fatal startup check failed code=%s detail=%s", exc.code, exc.technical)
-            raise RuntimeError(f"{exc.code}: {exc.technical}") from exc
+    if not STARTUP_CHECKS_COMPLETED:
+        locales.validate_required()
+        try:
+            await run_in_threadpool(service.startup_validate)
+            LOGGER.info("Startup validation completed successfully")
+        except AppError as exc:
+            if exc.code == "MIKROTIK_PERMISSION_DENIED":
+                service.runtime_error = exc
+                LOGGER.error("Startup permission check failed; diagnostic UI remains available: %s", exc.technical)
+            else:
+                LOGGER.error("Fatal startup check failed code=%s detail=%s", exc.code, exc.technical)
+                raise RuntimeError(f"{exc.code}: {exc.technical}") from exc
     yield
     routeros.close()
 

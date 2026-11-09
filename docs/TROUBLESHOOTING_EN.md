@@ -13,7 +13,9 @@ Inspect the logs:
 /container/print detail where name="awg-admin"
 ```
 
-Validation covers required env, API connectivity and credentials, AWG container presence and state, its envlist and server mode, matching `AWG_SERVER_PUB` to a WireGuard interface, interface addresses, and the port.
+Validation covers required env, API connectivity and credentials, AWG container presence, its assigned `envlists` and server mode, matching `AWG_SERVER_PUB` to a WireGuard interface, interface addresses, and the port. Variables are merged from every list assigned through `envlists`.
+
+A stopped AWG container does not prevent the panel from starting: an ERROR-level warning is logged and the panel remains available. When `AWG_CLIENT_PUBS` changes, a currently running container is restarted. A container that is stopped at that moment remains stopped.
 
 Insufficient API permissions are the exception: the panel remains available and shows a clear GUI error so the RouterOS group can be corrected.
 
@@ -36,11 +38,11 @@ By default, AWG Admin looks for a container whose `name` or `comment` is `wg-awg
 /container/print detail
 ```
 
-If the name differs, add `AWG_CONTAINER_NAME` to the AWG Admin envlist and restart the panel.
+If the name differs, add `AWG_CONTAINER_NAME` to the AWG Admin environment list and restart the panel.
 
 ## WireGuard interface not found
 
-The panel reads `AWG_SERVER_PUB` from the proxy envlist and requires exactly one WireGuard interface with that `public-key`:
+The panel reads `AWG_SERVER_PUB` from the proxy container's assigned `envlists` and requires exactly one WireGuard interface with that `public-key`:
 
 ```routeros
 /container/envs/print detail
@@ -60,7 +62,7 @@ AWG Admin invokes `interface/wireguard/peers/show-client-config`. Verify that:
 
 ## Key synchronization warning
 
-It appears when peers were changed manually or the AWG container was edited separately. “Synchronize” writes the current public keys of every peer on the detected interface to `AWG_CLIENT_PUBS`, then restarts only the AWG proxy container.
+It appears when peers were changed manually or the AWG container was edited separately. “Synchronize” writes the current public keys of every peer on the detected interface to `AWG_CLIENT_PUBS`. A running AWG proxy container is restarted; a stopped one remains stopped.
 
 ## Error technical details
 

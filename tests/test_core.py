@@ -3,6 +3,9 @@ from __future__ import annotations
 import base64
 import ipaddress
 import json
+import os
+import subprocess
+import sys
 import struct
 import zlib
 
@@ -35,9 +38,12 @@ class FakeRouterOS:
         if menu == "system/resource":
             return [{"version": "7.22", "board-name": "CHR", "architecture-name": "x86_64"}]
         if menu == "container":
-            return [{".id": "*1", "name": "wg-awg-server-1", "status": "running", "running": "true", "envlist": "awg-env"}]
+            return [{".id": "*1", "name": "wg-awg-server-1", "status": "running", "running": "true", "envlists": "awg-base,awg-clients"}]
         if menu == "container/envs":
-            return [{".id": f"*e{index}", "list": "awg-env", "key": key, "value": value} for index, (key, value) in enumerate(self.env.items())]
+            return [
+                {".id": f"*e{index}", "list": "awg-clients" if key == "AWG_CLIENT_PUBS" else "awg-base", "key": key, "value": value}
+                for index, (key, value) in enumerate(self.env.items())
+            ]
         if menu == "interface/wireguard":
             return [{".id": "*2", "name": "wg-awg", "listen-port": "51820", "public-key": "server-public", "disabled": "false", "running": "true"}]
         if menu == "ip/address":
@@ -45,6 +51,42 @@ class FakeRouterOS:
         if menu == "interface/wireguard/peers":
             return [{".id": "*4", "name": "Alice", "comment": "Phone", "interface": "wg-awg", "disabled": "false", "public-key": "client-public", "allowed-address": "192.168.177.2/32", "client-address": "192.168.177.2/24", "rx": "1024", "tx": "2048"}]
         raise AssertionError(menu)
+
+
+class FakeContainerStateRouterOS(FakeRouterOS):
+    def __init__(self, status="stopped"):
+        super().__init__()
+        self.status = status
+        self.actions = []
+
+    def print(self, menu, proplist=None):
+        if menu == "container":
+            return [{
+                ".id": "*1",
+                "name": "wg-awg-server-1",
+                "status": self.status,
+                "running": "true" if self.status == "running" else "false",
+                "envlists": "awg-base,awg-clients",
+            }]
+        return super().print(menu, proplist)
+
+    def action(self, menu, action, item_id):
+        self.actions.append((menu, action, item_id))
+        self.status = "stopped" if action == "stop" else "running"
+        return []
+
+
+class FakeCustomContainerNameRouterOS(FakeRouterOS):
+    def print(self, menu, proplist=None):
+        if menu == "container":
+            return [{
+                ".id": "*1",
+                "name": "custom-awg",
+                "status": "running",
+                "running": "true",
+                "envlists": "awg-base,awg-clients",
+            }]
+        return super().print(menu, proplist)
 
 
 @pytest.mark.parametrize("value", [0, 1, 127, 128, 16383, 16384, 0x1FFFFF, 0x200000, 0x0FFFFFFF, 0x10000000])
@@ -176,3 +218,73 @@ def test_service_discovers_proxy_interface_and_address_pool(monkeypatch):
     assert dashboard["clients"][0]["name"] == "Alice"
     assert dashboard["clients"][0]["rx_human"] == "1.0 KB"
     assert dashboard["sync"]["ok"] is True
+
+
+def test_service_combines_multiple_container_envlists(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    service = AwgAdminService(Settings.from_env(), FakeRouterOS())
+    context = service.load_context()
+    assert context.envlists == ["awg-base", "awg-clients"]
+    assert context.env["AWG_MODE"] == "server"
+    assert context.env["AWG_CLIENT_PUBS"] == "client-public"
+
+
+def test_custom_awg_container_name_is_used(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setenv("AWG_CONTAINER_NAME", "custom-awg")
+    service = AwgAdminService(Settings.from_env(), FakeCustomContainerNameRouterOS())
+    assert service.load_context().container["name"] == "custom-awg"
+
+
+def test_stopped_awg_container_does_not_fail_startup(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    service = AwgAdminService(Settings.from_env(), FakeContainerStateRouterOS("stopped"))
+    service.startup_validate()
+
+
+def test_restart_uses_current_container_state(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = FakeContainerStateRouterOS("stopped")
+    service = AwgAdminService(Settings.from_env(), router)
+    context = service.load_context()
+
+    assert service._restart_proxy(context) is False
+    assert router.actions == []
+
+    router.status = "running"
+    assert service._restart_proxy(context) is True
+    assert router.actions == [("container", "stop", "*1"), ("container", "start", "*1")]
+
+
+def test_runner_reports_configuration_error_without_traceback():
+    env = os.environ.copy()
+    for name in ("MIKROTIK_HOST", "MIKROTIK_USERNAME", "MIKROTIK_PASSWORD", "AWG_CLIENT_ENDPOINT", "SESSION_SECRET"):
+        env.pop(name, None)
+    result = subprocess.run(
+        [sys.executable, "-m", "app.runner"],
+        cwd=os.path.dirname(os.path.dirname(__file__)),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 1
+    assert result.stderr.startswith("AWG_ADMIN_STARTUP_ERROR: Missing required environment variables:")
+    assert "Traceback" not in result.stderr

@@ -19,7 +19,7 @@ Features:
 
 ## Quick start on MikroTik
 
-RouterOS v7 with the Container package, a running server-mode `awg-proxy`, and the `api` or `api-ssl` service are required.
+RouterOS v7 with the Container package, a configured server-mode `awg-proxy`, and the `api` or `api-ssl` service are required. The AWG container may be stopped without preventing the panel from running.
 
 Create a dedicated group and user. AWG Admin needs only `read`, `write`, `sensitive`, and `api`:
 
@@ -43,7 +43,7 @@ In this example, MikroTik uses `172.17.0.1` and the container uses `172.17.0.2`:
 /container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
 /container/config/set registry-url=https://registry-1.docker.io
-/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlist=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Wait until the container is `stopped`, then start it:
@@ -54,7 +54,7 @@ Wait until the container is `stopped`, then start it:
 
 The panel listens on TCP port `8080` at the container address. `AWG_CLIENT_ENDPOINT` is used only to generate client configurations and is never probed.
 
-RouterOS generates `SESSION_SECRET` once and stores it in the envlist, so active panel sessions survive container restarts.
+RouterOS generates `SESSION_SECRET` once and stores it in the environment list, so active panel sessions survive container restarts.
 
 Set `AWG_CONTAINER_NAME` when the proxy container is not named `wg-awg-server-1`. See the [environment reference](docs/ENVIRONMENT_EN.md) for every option.
 

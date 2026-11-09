@@ -89,8 +89,8 @@ class ServerContext:
     peers: list[dict[str, str]]
 
     @property
-    def envlist(self) -> str:
-        return self.container.get("envlist", "")
+    def envlists(self) -> list[str]:
+        return split_values(self.container.get("envlists", "") or self.container.get("envlist", ""))
 
 
 def bool_value(value: object) -> bool:
@@ -322,7 +322,7 @@ class AwgAdminService:
         try:
             containers = self.client.print(
                 CONTAINER_MENU,
-                proplist=(".id", "name", "comment", "status", "tag", "envlist", "interface", "running"),
+                proplist=(".id", "name", "comment", "status", "tag", "envlists", "envlist", "interface", "running"),
             )
             container = next(
                 (
@@ -341,26 +341,26 @@ class AwgAdminService:
                     status_code=503,
                     hint_key="error.containerNotFoundHint",
                 )
-            status = container.get("status", "").lower()
-            running = bool_value(container.get("running", "")) or status == "running"
-            if validate and not running:
+            all_env_records = self.client.print(ENV_MENU, proplist=(".id", "list", "key", "value"))
+            envlists = split_values(container.get("envlists", "") or container.get("envlist", ""))
+            if not envlists:
                 raise AppError(
-                    "AWG_CONTAINER_STOPPED",
-                    "error.containerStopped",
-                    technical=f"container status is {status or 'unknown'}",
+                    "AWG_ENVLISTS_MISSING",
+                    "error.envlistsMissing",
+                    technical="container has no envlists",
                     status_code=503,
-                    hint_key="error.containerStoppedHint",
+                    hint_key="error.envlistsMissingHint",
                 )
-            envlist = container.get("envlist", "")
-            if not envlist:
-                raise AppError(
-                    "AWG_ENVLIST_MISSING",
-                    "error.envlistMissing",
-                    technical="container has no envlist",
-                    status_code=503,
-                )
-            env_records = [item for item in self.client.print(ENV_MENU, proplist=(".id", "list", "key", "value")) if item.get("list") == envlist]
-            env = {item.get("key", ""): item.get("value", "") for item in env_records if item.get("key")}
+            records_by_list: dict[str, list[dict[str, str]]] = {}
+            for item in all_env_records:
+                records_by_list.setdefault(item.get("list", ""), []).append(item)
+            env_records: list[dict[str, str]] = []
+            env: dict[str, str] = {}
+            for list_name in envlists:
+                for item in records_by_list.get(list_name, []):
+                    env_records.append(item)
+                    if item.get("key"):
+                        env[item["key"]] = item.get("value", "")
             missing = sorted(BASE_REQUIRED_AWG_ENV - env.keys())
             if missing:
                 raise AppError(
@@ -459,7 +459,13 @@ class AwgAdminService:
             resource.get("architecture-name", "unknown"),
             resource.get("version", "unknown"),
         )
-        self.load_context(validate=True)
+        context = self.load_context(validate=True)
+        if not self._container_running(context.container):
+            LOGGER.error(
+                "AWG_CONTAINER_STOPPED: container %s is not running (status=%s); panel remains available",
+                self.settings.awg_container_name,
+                context.container.get("status", "unknown"),
+            )
 
     def _used_addresses(self, context: ServerContext) -> set[ipaddress._BaseAddress]:
         used: set[ipaddress._BaseAddress] = set()
@@ -587,41 +593,60 @@ class AwgAdminService:
             rows.append({"key": key, "label_key": "", "value": context.env[key], "sensitive": key in sensitive_keys})
         return {"settings": rows, "editable": False}
 
-    def _env_record(self, context: ServerContext, key: str) -> dict[str, str]:
-        record = next((item for item in context.env_records if item.get("key") == key), None)
-        if not record:
+    def _env_records(self, context: ServerContext, key: str) -> list[dict[str, str]]:
+        records = [item for item in context.env_records if item.get("key") == key]
+        if not records:
             raise AppError("AWG_ENV_INVALID", "error.awgEnvInvalid", technical=f"{key} record not found", status_code=503)
-        return record
+        return records
 
     def _set_client_keys(self, context: ServerContext, keys: set[str]) -> None:
-        record = self._env_record(context, "AWG_CLIENT_PUBS")
-        self.client.set(ENV_MENU, record[".id"], {"value": ",".join(sorted(keys))})
+        value = ",".join(sorted(keys))
+        for record in self._env_records(context, "AWG_CLIENT_PUBS"):
+            self.client.set(ENV_MENU, record[".id"], {"value": value})
 
-    def _restart_proxy(self, context: ServerContext) -> None:
+    @staticmethod
+    def _container_running(container: dict[str, str]) -> bool:
+        return bool_value(container.get("running", "")) or container.get("status", "").lower() == "running"
+
+    def _restart_proxy(self, context: ServerContext) -> bool:
         container_id = context.container.get(".id", "")
         containers = self.client.print(CONTAINER_MENU, proplist=(".id", "status", "running"))
         current = next((item for item in containers if item.get(".id") == container_id), None)
-        last_status = current.get("status", "") if current else "missing"
-        already_stopped = current and not bool_value(current.get("running", "")) and last_status.lower() == "stopped"
-        if not already_stopped:
-            self.client.action(CONTAINER_MENU, "stop", container_id)
-            stop_deadline = time.monotonic() + 20
-            while time.monotonic() < stop_deadline:
-                containers = self.client.print(CONTAINER_MENU, proplist=(".id", "status", "running"))
-                current = next((item for item in containers if item.get(".id") == container_id), None)
-                if current:
-                    last_status = current.get("status", "")
-                    if not bool_value(current.get("running", "")) and last_status.lower() == "stopped":
-                        break
-                time.sleep(1)
-            else:
-                raise AppError(
-                    "PROXY_RESTART_FAILED",
-                    "error.proxyRestartFailed",
-                    technical=f"container did not stop; status: {last_status or 'unknown'}",
-                    status_code=502,
-                    hint_key="error.proxyRestartFailedHint",
-                )
+        if not current:
+            raise AppError(
+                "AWG_CONTAINER_NOT_FOUND",
+                "error.containerNotFound",
+                technical="container disappeared before restart",
+                status_code=503,
+                hint_key="error.containerNotFoundHint",
+            )
+        last_status = current.get("status", "")
+        if not self._container_running(current):
+            LOGGER.error(
+                "AWG_CONTAINER_STOPPED: configuration was updated but container %s was not restarted (status=%s)",
+                self.settings.awg_container_name,
+                last_status or "unknown",
+            )
+            return False
+
+        self.client.action(CONTAINER_MENU, "stop", container_id)
+        stop_deadline = time.monotonic() + 20
+        while time.monotonic() < stop_deadline:
+            containers = self.client.print(CONTAINER_MENU, proplist=(".id", "status", "running"))
+            current = next((item for item in containers if item.get(".id") == container_id), None)
+            if current:
+                last_status = current.get("status", "")
+                if not self._container_running(current):
+                    break
+            time.sleep(1)
+        else:
+            raise AppError(
+                "PROXY_RESTART_FAILED",
+                "error.proxyRestartFailed",
+                technical=f"container did not stop; status: {last_status or 'unknown'}",
+                status_code=502,
+                hint_key="error.proxyRestartFailedHint",
+            )
 
         self.client.action(CONTAINER_MENU, "start", container_id)
         start_deadline = time.monotonic() + 30
@@ -630,8 +655,8 @@ class AwgAdminService:
             current = next((item for item in containers if item.get(".id") == container_id), None)
             if current:
                 last_status = current.get("status", "")
-                if bool_value(current.get("running", "")) or last_status.lower() == "running":
-                    return
+                if self._container_running(current):
+                    return True
             time.sleep(1)
         raise AppError(
             "PROXY_RESTART_FAILED",

@@ -49,7 +49,7 @@ Address pools are not configured through env. The panel reads every active IPv4 
 | `AUTH_DISABLE` | `no` | `yes` disables authentication entirely. The panel logs an ERROR warning but remains operational. |
 | `COOKIE_SECURE` | `no` | `yes` sends cookies over HTTPS only. Do not enable for direct HTTP access. |
 
-When neither credential is set, `admin/admin` is used and an ERROR-level warning is logged. The launch example uses `value=[:rndstr length=64]` for `SESSION_SECRET`: RouterOS generates the value once and stores it in the envlist, so container restarts do not invalidate active sessions.
+When neither credential is set, `admin/admin` is used and an ERROR-level warning is logged. The launch example uses `value=[:rndstr length=64]` for `SESSION_SECRET`: RouterOS generates the value once and stores it in the environment list, so container restarts do not invalidate active sessions.
 
 ## UI and logging
 
