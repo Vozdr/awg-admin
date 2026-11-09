@@ -95,6 +95,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Publish latest
+        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           images=()

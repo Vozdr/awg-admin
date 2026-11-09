@@ -21,7 +21,7 @@ from qrcode.image.svg import SvgPathImage
 from .errors import AppError
 from .models import ClientCreate, ClientUpdate
 from .routeros import RouterOSClient
-from .settings import Settings
+from .settings import ServerSettings
 
 
 LOGGER = logging.getLogger("awg-admin")
@@ -422,7 +422,7 @@ def make_vpn_uri(config: str, env: dict[str, str], server_name: str) -> str:
 
 
 class AwgAdminService:
-    def __init__(self, settings: Settings, client: RouterOSClient):
+    def __init__(self, settings: ServerSettings, client: RouterOSClient):
         self.settings = settings
         self.client = client
         self.operation_lock = threading.RLock()
@@ -688,12 +688,20 @@ class AwgAdminService:
             "pools": self.pools(context),
             "sync": self.sync_status(context),
             "server": {
+                "id": self.settings.id,
+                "name": self.settings.display_name,
+                "mikrotik_host": self.settings.mikrotik_host,
                 "container_name": self.settings.awg_container_name,
                 "container_status": "running" if self._container_running(context.container) else "stopped",
                 "wireguard_interface": context.wireguard.get("name", ""),
                 "listen_port": context.wireguard.get("listen-port", ""),
                 "client_endpoint": self.settings.awg_client_endpoint,
                 "last_success": self.last_success,
+                "client_defaults": {
+                    "keepalive": self.settings.client_default_keepalive,
+                    "dns": self.settings.client_default_dns,
+                    "allowed_ips": self.settings.client_default_allowed_ips,
+                },
             },
         }
 

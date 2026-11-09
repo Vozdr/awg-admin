@@ -30,12 +30,9 @@ def main() -> int:
 
     try:
         app_module.locales.validate_required()
-        app_module.service.startup_validate()
+        app_module.registry.validate_startup()
     except AppError as exc:
-        if exc.code == "MIKROTIK_PERMISSION_DENIED":
-            app_module.service.runtime_error = exc
-        else:
-            return startup_error(f"{exc.code}: {exc.technical or exc.message_key}")
+        return startup_error(f"{exc.code}: {exc.technical or exc.message_key}")
     except Exception as exc:
         return startup_error(f"UNKNOWN: {exc}")
 

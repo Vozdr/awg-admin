@@ -1,6 +1,6 @@
 # AWG Admin
 
-[Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [English](README_EN.md) · [Все переменные окружения](docs/ENVIRONMENT_RU.md) · [Диагностика](docs/TROUBLESHOOTING_RU.md)
+[Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [English](README_EN.md) · [Все переменные окружения](docs/ENVIRONMENT_RU.md) · [Несколько серверов](docs/MULTI_SERVER_RU.md) · [Диагностика](docs/TROUBLESHOOTING_RU.md)
 
 AWG Admin — веб-панель управления клиентами AmneziaWG для MikroTik. Она рассчитана на серверный контейнер [`amneziawg-mikrotik-c` от timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) и работает с RouterOS напрямую через API или API-SSL.
 
@@ -13,6 +13,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 - генерирование QR-кода, `.conf`-файла и ссылки с конфигурацией для peer;
 - статистика по каждому peer;
 - просмотр настроек AWG-сервера;
+- управление несколькими AWG-серверами из одной панели;
 - локализация интерфейса.
 
 ## Быстрый запуск на MikroTik
@@ -55,6 +56,8 @@ AWG Admin — веб-панель управления клиентами Amnezi
 `SESSION_SECRET` генерируется командой RouterOS один раз и сохраняется в списке переменных окружения. Поэтому активные сессии панели сохраняются после перезапуска контейнера.
 
 Если AWG-контейнер называется не `wg-awg-server-1`, добавьте `AWG_CONTAINER_NAME`. Полный справочник находится в [описании переменных окружения](docs/ENVIRONMENT_RU.md).
+
+Для подключения второго и последующих серверов параметры сервера получают числовой суффикс: например, `MIKROTIK_HOST_2` и `AWG_CLIENT_ENDPOINT_2`. Общая авторизация панели и `SESSION_SECRET` остаются без суффикса. Подробная схема приведена в инструкции [«Несколько серверов»](docs/MULTI_SERVER_RU.md).
 
 ## Безопасность
 

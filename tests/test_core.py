@@ -11,7 +11,8 @@ import zlib
 
 import pytest
 
-from app.errors import redact
+from app.errors import AppError, redact
+from app.registry import ServerRegistry
 from app.routeros import decode_length, encode_length, parse_sentence
 from app.services import (
     AwgAdminService,
@@ -237,6 +238,65 @@ def test_settings_defaults_and_validation(monkeypatch):
         Settings.from_env()
 
 
+def test_settings_discovers_independent_suffixed_servers(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "primary")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "primary-secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "one.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setenv("MIKROTIK_HOST_3", "192.0.2.3")
+    monkeypatch.setenv("MIKROTIK_USERNAME_3", "third")
+    monkeypatch.setenv("MIKROTIK_PASSWORD_3", "third-secret")
+    monkeypatch.setenv("MIKROTIK_API_SSL_3", "yes")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT_3", "three.example.org:51821")
+    monkeypatch.setenv("AWG_CONTAINER_NAME_3", "awg-three")
+    monkeypatch.setenv("AWG_SERVER_NAME_3", "Branch office")
+    monkeypatch.setenv("CLIENT_DEFAULT_DNS_3", "9.9.9.9")
+
+    settings = Settings.from_env()
+
+    assert [server.id for server in settings.servers] == ["1", "3"]
+    assert settings.servers[1].mikrotik_api_port == 8729
+    assert settings.servers[1].awg_container_name == "awg-three"
+    assert settings.servers[1].display_name == "Branch office"
+    assert settings.servers[1].client_default_dns == "9.9.9.9"
+
+
+def test_incomplete_suffixed_server_is_a_configuration_error(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "primary")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "primary-secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "one.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setenv("MIKROTIK_HOST_2", "192.0.2.2")
+
+    with pytest.raises(SettingsError, match="MIKROTIK_USERNAME_2"):
+        Settings.from_env()
+
+
+def test_registry_keeps_healthy_server_available_when_another_fails(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "primary")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "primary-secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "one.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setenv("MIKROTIK_HOST_2", "192.0.2.2")
+    monkeypatch.setenv("MIKROTIK_USERNAME_2", "secondary")
+    monkeypatch.setenv("MIKROTIK_PASSWORD_2", "secondary-secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT_2", "two.example.org:51820")
+    registry = ServerRegistry(Settings.from_env())
+    failure = AppError("AWG_CONTAINER_NOT_FOUND", "error.containerNotFound", status_code=503)
+
+    registry.runtimes["1"].service.startup_validate = lambda: None
+    registry.runtimes["2"].service.startup_validate = lambda: (_ for _ in ()).throw(failure)
+    registry.validate_startup()
+
+    summaries = {item["id"]: item for item in registry.list()["servers"]}
+    assert summaries["1"]["available"] is True
+    assert summaries["2"]["available"] is False
+    assert summaries["2"]["error"]["code"] == "AWG_CONTAINER_NOT_FOUND"
+
+
 def test_session_secret_is_required_only_when_auth_is_enabled(monkeypatch):
     monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
     monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
@@ -256,7 +316,7 @@ def test_service_discovers_proxy_interface_and_address_pool(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    service = AwgAdminService(Settings.from_env(), FakeRouterOS())
+    service = AwgAdminService(Settings.from_env().primary_server, FakeRouterOS())
     service.startup_validate()
     dashboard = service.dashboard()
     assert dashboard["server"]["wireguard_interface"] == "wg-awg"
@@ -272,7 +332,7 @@ def test_service_combines_multiple_container_envlists(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    service = AwgAdminService(Settings.from_env(), FakeRouterOS())
+    service = AwgAdminService(Settings.from_env().primary_server, FakeRouterOS())
     context = service.load_context()
     assert context.envlists == ["awg-base", "awg-clients"]
     assert context.env["AWG_MODE"] == "server"
@@ -285,7 +345,7 @@ def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    service = AwgAdminService(Settings.from_env(), FakeRouterOS())
+    service = AwgAdminService(Settings.from_env().primary_server, FakeRouterOS())
     settings = service.server_settings()["settings"]
     by_key = {item["key"]: item for item in settings}
 
@@ -304,7 +364,7 @@ def test_service_uses_only_private_key_from_show_client_config(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    result = AwgAdminService(Settings.from_env(), FakeClientConfigRouterOS()).client_config("*4")
+    result = AwgAdminService(Settings.from_env().primary_server, FakeClientConfigRouterOS()).client_config("*4")
     parsed = parse_conf(result["config"])
     assert parsed["Interface"]["PrivateKey"] == "client-private"
     assert parsed["Interface"]["Address"] == "192.168.177.2/32"
@@ -318,7 +378,7 @@ def test_missing_private_key_produces_warning_and_empty_config_field(monkeypatch
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    service = AwgAdminService(Settings.from_env(), FakeClientConfigRouterOS("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="))
+    service = AwgAdminService(Settings.from_env().primary_server, FakeClientConfigRouterOS("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="))
     result = service.client_config("*4")
     assert result["private_key_missing"] is True
     assert "PrivateKey = \n" in result["config"]
@@ -331,7 +391,7 @@ def test_custom_awg_container_name_is_used(monkeypatch):
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     monkeypatch.setenv("AWG_CONTAINER_NAME", "custom-awg")
-    service = AwgAdminService(Settings.from_env(), FakeCustomContainerNameRouterOS())
+    service = AwgAdminService(Settings.from_env().primary_server, FakeCustomContainerNameRouterOS())
     assert service.load_context().container["name"] == "custom-awg"
 
 
@@ -341,7 +401,7 @@ def test_stopped_awg_container_does_not_fail_startup(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
-    service = AwgAdminService(Settings.from_env(), FakeContainerStateRouterOS("stopped"))
+    service = AwgAdminService(Settings.from_env().primary_server, FakeContainerStateRouterOS("stopped"))
     service.startup_validate()
 
 
@@ -352,7 +412,7 @@ def test_restart_uses_current_container_state(monkeypatch):
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     router = FakeContainerStateRouterOS("stopped")
-    service = AwgAdminService(Settings.from_env(), router)
+    service = AwgAdminService(Settings.from_env().primary_server, router)
     context = service.load_context()
 
     assert service._restart_proxy(context) is False

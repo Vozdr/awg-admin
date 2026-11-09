@@ -2,7 +2,7 @@
 
 Полная документация и исходный код: [github.com/Vozdr/awg-admin](https://github.com/Vozdr/awg-admin)
 
-Веб-панель управления клиентами AmneziaWG на MikroTik для серверного контейнера [`amneziawg-mikrotik-c` от timbrs](https://github.com/timbrs/amneziawg-mikrotik-c). Данные хранятся только в MikroTik; локальной базы и конфигов нет.
+Веб-панель управления клиентами одного или нескольких серверов AmneziaWG на MikroTik для контейнера [`amneziawg-mikrotik-c` от timbrs](https://github.com/timbrs/amneziawg-mikrotik-c). Данные хранятся только в MikroTik; локальной базы и конфигов нет.
 
 Образ: `w03zd8rc/awg-admin:latest`
 

@@ -1,6 +1,6 @@
 # AWG Admin environment variables
 
-[Home](../README_EN.md) · [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [Troubleshooting](TROUBLESHOOTING_EN.md)
+[Home](../README_EN.md) · [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [Multiple servers](MULTI_SERVER_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
 
 AWG Admin does not read local configuration files and has no database. All application settings come from environment variables, while operational data comes from MikroTik.
 
@@ -50,6 +50,14 @@ Address pools are not configured through env. The panel reads every active IPv4 
 | `COOKIE_SECURE` | `no` | `yes` sends cookies over HTTPS only. Do not enable for direct HTTP access. |
 
 When neither credential is set, `admin/admin` is used and an ERROR-level warning is logged. The launch example uses `value=[:rndstr length=64]` for `SESSION_SECRET`: RouterOS generates the value once and stores it in the environment list, so container restarts do not invalidate active sessions.
+
+## Multiple servers
+
+The first server uses the unsuffixed variable names listed above. For each additional server, append the same numeric suffix to all of its settings: `_2`, `_3`, and so on. For example: `MIKROTIK_HOST_2`, `MIKROTIK_USERNAME_2`, `MIKROTIK_PASSWORD_2`, and `AWG_CLIENT_ENDPOINT_2`.
+
+Suffixes are supported for every setting in “MikroTik connection” and “AWG server and new clients”. `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `AUTH_DISABLE`, `COOKIE_SECURE`, `SESSION_SECRET`, UI, and logging settings are panel-wide and always remain unsuffixed.
+
+An additional server is declared by `MIKROTIK_HOST_N`. All four required settings with the same suffix must then be present. See [Multiple servers](MULTI_SERVER_EN.md) for a complete example.
 
 ## UI and logging
 

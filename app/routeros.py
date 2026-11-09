@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from .errors import AppError
-from .settings import Settings
+from .settings import ServerSettings
 
 
 class RouterOSProtocolError(RuntimeError):
@@ -96,7 +96,7 @@ def trap_to_app_error(exc: RouterOSTrap) -> AppError:
 
 
 class RouterOSClient:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: ServerSettings):
         self.settings = settings
         self._sock: socket.socket | ssl.SSLSocket | None = None
         self._lock = threading.RLock()

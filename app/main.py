@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,8 +19,7 @@ from .auth import SESSION_COOKIE, SESSION_MAX_AGE, AuthManager, client_address
 from .errors import AppError, unknown_error
 from .i18n import Locales
 from .models import ClientCreate, ClientToggle, ClientUpdate, SyncRequest
-from .routeros import RouterOSClient
-from .services import AwgAdminService
+from .registry import ServerRegistry, ServerRuntime
 from .settings import Settings, SettingsError
 
 
@@ -41,10 +40,15 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("awg-admin")
 
-routeros = RouterOSClient(settings)
-service = AwgAdminService(settings, routeros)
+registry = ServerRegistry(settings)
 auth = AuthManager(settings)
 locales = Locales(settings)
+
+
+def selected_runtime(
+    x_awg_server: str | None = Header(default=None, alias="X-AWG-Server"),
+) -> ServerRuntime:
+    return registry.get(x_awg_server)
 
 
 def render_template(name: str, replacements: dict[str, str] | None = None) -> str:
@@ -69,17 +73,13 @@ async def lifespan(_: FastAPI):
     if not STARTUP_CHECKS_COMPLETED:
         locales.validate_required()
         try:
-            await run_in_threadpool(service.startup_validate)
-            LOGGER.info("Startup validation completed successfully")
+            await run_in_threadpool(registry.validate_startup)
+            LOGGER.info("Startup validation completed")
         except AppError as exc:
-            if exc.code == "MIKROTIK_PERMISSION_DENIED":
-                service.runtime_error = exc
-                LOGGER.error("Startup permission check failed; diagnostic UI remains available: %s", exc.technical)
-            else:
-                LOGGER.error("Fatal startup check failed code=%s detail=%s", exc.code, exc.technical)
-                raise RuntimeError(f"{exc.code}: {exc.technical}") from exc
+            LOGGER.error("Fatal startup check failed code=%s detail=%s", exc.code, exc.technical)
+            raise RuntimeError(f"{exc.code}: {exc.technical}") from exc
     yield
-    routeros.close()
+    registry.close()
 
 
 app = FastAPI(title="AWG Admin", version=settings.app_version, lifespan=lifespan)
@@ -117,8 +117,9 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/readyz")
 async def readyz() -> dict[str, str]:
-    await run_in_threadpool(service.load_context, False)
-    return {"status": "ready", "last_success": service.last_success}
+    runtime = registry.get(None)
+    await run_in_threadpool(runtime.service.load_context, False)
+    return {"status": "ready", "last_success": runtime.service.last_success}
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -232,67 +233,71 @@ async def session_info(session: str = Depends(auth.require_auth)) -> dict[str, A
         "default_lang": settings.default_lang,
         "default_theme": settings.default_theme,
         "version": settings.app_version,
-        "client_defaults": {
-            "keepalive": settings.client_default_keepalive,
-            "dns": settings.client_default_dns,
-            "allowed_ips": settings.client_default_allowed_ips,
-        },
     }
 
 
+@app.get("/api/servers")
+async def servers(_: str = Depends(auth.require_auth)) -> dict[str, Any]:
+    return registry.list()
+
+
 @app.get("/api/dashboard")
-async def dashboard(_: str = Depends(auth.require_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.dashboard)
+async def dashboard(
+    _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)
+) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.dashboard)
 
 
 @app.get("/api/server/settings")
-async def server_settings(_: str = Depends(auth.require_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.server_settings)
+async def server_settings(
+    _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)
+) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.server_settings)
 
 
 @app.get("/api/clients/{peer_id}/config")
-async def client_config(peer_id: str, _: str = Depends(auth.require_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.client_config, peer_id)
+async def client_config(peer_id: str, _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.client_config, peer_id)
 
 
 @app.get("/api/clients/{peer_id}")
-async def client_details(peer_id: str, _: str = Depends(auth.require_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.client_details, peer_id)
+async def client_details(peer_id: str, _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.client_details, peer_id)
 
 
 @app.get("/api/client-keys")
-async def client_keys(_: str = Depends(auth.require_auth)) -> dict[str, str]:
-    return service.generate_client_keys()
+async def client_keys(_: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, str]:
+    return runtime.service.generate_client_keys()
 
 
 @app.post("/api/clients")
-async def create_client(data: ClientCreate, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.create_client, data)
+async def create_client(data: ClientCreate, _: str = Depends(auth.require_write_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.create_client, data)
 
 
 @app.put("/api/clients/{peer_id}")
-async def update_client(peer_id: str, data: ClientUpdate, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.update_client, peer_id, data)
+async def update_client(peer_id: str, data: ClientUpdate, _: str = Depends(auth.require_write_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.update_client, peer_id, data)
 
 
 @app.post("/api/clients/{peer_id}/disabled")
-async def toggle_client(peer_id: str, data: ClientToggle, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.toggle_client, peer_id, data.disabled)
+async def toggle_client(peer_id: str, data: ClientToggle, _: str = Depends(auth.require_write_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.toggle_client, peer_id, data.disabled)
 
 
 @app.delete("/api/clients/{peer_id}")
-async def delete_client(peer_id: str, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.delete_client, peer_id)
+async def delete_client(peer_id: str, _: str = Depends(auth.require_write_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.delete_client, peer_id)
 
 
 @app.get("/api/sync")
-async def sync_preview(_: str = Depends(auth.require_auth)) -> dict[str, Any]:
-    return await run_in_threadpool(service.sync_preview)
+async def sync_preview(_: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.sync_preview)
 
 
 @app.post("/api/sync")
-async def sync_apply(data: SyncRequest, _: str = Depends(auth.require_write_auth)) -> dict[str, Any]:
+async def sync_apply(data: SyncRequest, _: str = Depends(auth.require_write_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
     if not data.confirm:
         raise HTTPException(status_code=400, detail="Confirmation is required")
-    return await run_in_threadpool(service.sync_apply)
+    return await run_in_threadpool(runtime.service.sync_apply)
 

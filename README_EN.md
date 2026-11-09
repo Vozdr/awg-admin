@@ -1,6 +1,6 @@
 # AWG Admin
 
-[Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
+[Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
 AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 
@@ -13,6 +13,7 @@ Features:
 - generate a QR code, `.conf` file, and configuration link for a peer;
 - show statistics for each peer;
 - inspect AWG server settings;
+- manage multiple AWG servers from one panel;
 - interface localization.
 
 ## Quick start on MikroTik
@@ -55,6 +56,8 @@ The panel listens on TCP port `8080` at the container address. `AWG_CLIENT_ENDPO
 RouterOS generates `SESSION_SECRET` once and stores it in the environment list, so active panel sessions survive container restarts.
 
 Set `AWG_CONTAINER_NAME` when the proxy container is not named `wg-awg-server-1`. See the [environment reference](docs/ENVIRONMENT_EN.md) for every option.
+
+For a second or later server, add its number to every server-specific variable, for example `MIKROTIK_HOST_2` and `AWG_CLIENT_ENDPOINT_2`. Panel authentication and `SESSION_SECRET` remain shared and have no suffix. See [Multiple servers](docs/MULTI_SERVER_EN.md) for the complete setup.
 
 ## Security
 
