@@ -60,6 +60,7 @@ function renderDashboard() {
 function sortValue(client, field) { if (field==="disabled") return client.disabled?1:0; if (field==="rx") return Number(client.rx||0)+Number(client.tx||0); if (field==="last_handshake") return handshakeSeconds(client.last_handshake); return String(client[field]||"").toLocaleLowerCase(state.lang); }
 function renderClients() {
   const all=state.dashboard?.clients||[], query=$("#clientSearch").value.trim(), normalizedQuery=query.toLocaleLowerCase(state.lang);
+  $("#clearSearchButton").classList.toggle("hidden",!$("#clientSearch").value);
   let clients=all.filter(item => state.filter==="all" || (state.filter==="disabled" ? item.disabled : !item.disabled));
   clients=clients.filter(item => [item.name,item.comment,item.address].join(" ").toLocaleLowerCase(state.lang).includes(normalizedQuery));
   clients.sort((a,b) => { const av=sortValue(a,state.sort.field),bv=sortValue(b,state.sort.field); const result=typeof av==="number"?av-bv:String(av).localeCompare(String(bv),state.lang,{numeric:true,sensitivity:"base"}); return state.sort.direction==="asc"?result:-result; });
@@ -92,7 +93,18 @@ function confirmAction(title,message,danger=true) { return new Promise(resolve=>
 async function toggleClient(client,button) { const disabled=!client.disabled; if (!await confirmAction(t(disabled?"confirm.disableTitle":"confirm.enableTitle"),t(disabled?"confirm.disableMessage":"confirm.enableMessage",{name:client.name}),disabled)) return; await withBusy(button,async()=>{ await api(`/api/clients/${encodeURIComponent(client.id)}/disabled`,{method:"POST",body:{disabled}}); showToast(t(disabled?"toast.clientDisabled":"toast.clientEnabled")); await loadDashboard(); }); }
 async function deleteClient(client,button) { if (!await confirmAction(t("confirm.deleteTitle"),t("confirm.deleteMessage",{name:client.name}))) return; await withBusy(button,async()=>{ await api(`/api/clients/${encodeURIComponent(client.id)}`,{method:"DELETE"}); showToast(t("toast.clientDeleted")); await loadDashboard(); }); }
 async function synchronize(button) { let preview; await withBusy(button,async()=>{preview=await api("/api/sync");}); if (!preview||!await confirmAction(t("sync.confirmTitle"),t("sync.confirmMessage",{count:preview.target_keys.length}),false)) return; await withBusy(button,async()=>{ await api("/api/sync",{method:"POST",body:{confirm:true}}); showToast(t("toast.synchronized")); await loadDashboard(); }); }
-async function openServerSettings() { const data=await api("/api/server/settings"); $("#settingsList").innerHTML=data.settings.map(item=>`<div class="setting-row"><span>${escapeHtml(item.label_key?t(item.label_key):item.key)}</span><span class="setting-value">${escapeHtml(item.sensitive?"••••••••":item.value||"—")}</span></div>`).join(""); openModal($("#serverDialog")); }
+async function openServerSettings() {
+  const data=await api("/api/server/settings"); let section="";
+  $("#settingsList").innerHTML=data.settings.map(item=>{
+    const heading=item.section!==section?`<div class="settings-section">${escapeHtml(t(`serverSettings.section.${item.section}`))}</div>`:"";
+    section=item.section;
+    const description=item.description_key?`<small>${escapeHtml(t(item.description_key))}</small>`:"";
+    const managed=item.managed?`<small class="managed-badge">${escapeHtml(t("serverSettings.managed"))}</small>`:"";
+    const value=item.value_key?t(item.value_key):(item.value||"—");
+    return `${heading}<div class="setting-row"><span class="setting-row-label"><span>${escapeHtml(item.label_key?t(item.label_key):item.key)}</span>${description}${managed}</span><span class="setting-value">${escapeHtml(value)}</span></div>`;
+  }).join("");
+  openModal($("#serverDialog"));
+}
 async function copyText(value) { if (navigator.clipboard&&isSecureContext) await navigator.clipboard.writeText(value); else { const area=document.createElement("textarea"); area.value=value; area.style.cssText="position:fixed;opacity:0;pointer-events:none"; document.body.appendChild(area); area.select(); if (!document.execCommand("copy")) throw new Error("clipboard copy failed"); area.remove(); } showToast(t("toast.copied")); }
 function downloadConfig() { const blob=new Blob([state.currentConfig.config],{type:"text/plain;charset=utf-8"}),link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=`${String(state.currentConfig.name||"client").replace(/[^a-z0-9_-]+/gi,"_")}.conf`; link.click(); URL.revokeObjectURL(link.href); }
 function setAutoRefresh(value) { clearInterval(state.refreshTimer); localStorage.setItem("awg-auto-refresh",value); if (+value) state.refreshTimer=setInterval(()=>{ if (!state.busy&&!document.querySelector("dialog[open]")) loadDashboard(); },+value); }
@@ -100,7 +112,7 @@ function bindCommon() { setTheme(state.theme); $("#themeToggle")?.addEventListen
 
 async function startApp() {
   await loadLocales(); bindCommon(); if (boot.login) return; try { const session=await api("/api/session"); state.csrf=session.csrf; state.defaults=session.client_defaults||state.defaults; $("#authWarning").classList.toggle("hidden",!session.auth_disabled); $("#logoutButton").classList.toggle("hidden",session.auth_disabled); } catch(_) { return; }
-  $("#refreshButton").addEventListener("click",event=>withBusy(event.currentTarget,loadDashboard)); $("#retryButton").addEventListener("click",loadDashboard); $("#clientSearch").addEventListener("input",renderClients);
+  $("#refreshButton").addEventListener("click",event=>withBusy(event.currentTarget,loadDashboard)); $("#retryButton").addEventListener("click",loadDashboard); $("#clientSearch").addEventListener("input",renderClients); $("#clearSearchButton").addEventListener("click",()=>{ $("#clientSearch").value=""; $("#clientSearch").focus(); renderClients(); });
   $$('.summary-card').forEach(card=>card.addEventListener("click",()=>{state.filter=card.dataset.filter;renderClients();})); $$('.sortable').forEach(th=>th.addEventListener("click",()=>{ if (state.sort.field===th.dataset.sort) state.sort.direction=state.sort.direction==="asc"?"desc":"asc"; else {state.sort.field=th.dataset.sort;state.sort.direction="asc";} localStorage.setItem("awg-sort-field",state.sort.field);localStorage.setItem("awg-sort-direction",state.sort.direction);renderClients();}));
   $("#addClientButton").addEventListener("click",event=>withBusy(event.currentTarget,()=>openClientDialog())); $("#clientForm").addEventListener("submit",saveClient); $("#addressMode").addEventListener("change",updateAddressFields); $("#clientForm").elements.store_private_key.addEventListener("change",updateKeyFields); $("#clientForm").elements.use_preshared_key.addEventListener("change",updateKeyFields); $("#generateKeyPair").addEventListener("click",event=>withBusy(event.currentTarget,()=>generateKeys("pair"))); $("#generatePsk").addEventListener("click",event=>withBusy(event.currentTarget,()=>generateKeys("psk")));
   $("#serverSettingsButton").addEventListener("click",event=>withBusy(event.currentTarget,openServerSettings)); $("#syncButton").addEventListener("click",event=>synchronize(event.currentTarget).catch(showError));

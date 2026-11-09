@@ -13,13 +13,13 @@
     <section class="error-banner hidden" id="runtimeError"><div><strong data-i18n="error.connectionTitle">Cannot load data</strong><span id="runtimeErrorText"></span></div><button class="button" id="retryButton" data-i18n="common.retry">Retry</button></section>
 
     <section class="summary-grid" aria-label="Client filters">
-      <button class="summary-card active" type="button" data-filter="all"><strong id="totalClients">—</strong><span data-i18n="summary.total">Clients</span></button>
-      <button class="summary-card" type="button" data-filter="enabled"><strong id="activeClients">—</strong><span data-i18n="summary.active">Enabled</span></button>
-      <button class="summary-card" type="button" data-filter="disabled"><strong id="disabledClients">—</strong><span data-i18n="summary.disabled">Disabled</span></button>
+      <button class="summary-card active" type="button" data-filter="all"><span data-i18n="summary.total">Clients</span><strong id="totalClients">—</strong></button>
+      <button class="summary-card" type="button" data-filter="enabled"><span data-i18n="summary.active">Enabled</span><strong id="activeClients">—</strong></button>
+      <button class="summary-card" type="button" data-filter="disabled"><span data-i18n="summary.disabled">Disabled</span><strong id="disabledClients">—</strong></button>
     </section>
 
     <section class="panel">
-      <div class="panel-header"><h1 data-i18n="clients.title">Clients</h1><label class="search"><span>⌕</span><input id="clientSearch" type="search" data-i18n-placeholder="clients.search" placeholder="Search"></label></div>
+      <div class="panel-header"><h1 data-i18n="clients.title">Clients</h1><label class="search"><span>⌕</span><input id="clientSearch" type="search" data-i18n-placeholder="clients.search" placeholder="Search"><button type="button" class="search-clear hidden" id="clearSearchButton" data-i18n-title="common.clearSearch" title="Clear search">×</button></label></div>
       <div class="table-wrap"><table><thead><tr>
         <th class="sortable" data-sort="name"><span data-i18n="clients.client">Client</span><i></i></th><th class="sortable" data-sort="address"><span data-i18n="clients.address">Address</span><i></i></th><th class="sortable" data-sort="disabled"><span data-i18n="clients.status">Status</span><i></i></th><th class="sortable" data-sort="last_handshake"><span data-i18n="clients.handshake">Last handshake</span><i></i></th><th class="sortable" data-sort="rx"><span data-i18n="clients.traffic">Traffic</span><i></i></th><th></th>
       </tr></thead><tbody id="clientsBody"></tbody></table><div class="empty-state hidden" id="emptyState"><div>⌁</div><strong id="emptyTitle"></strong><span id="emptyHint"></span></div></div>

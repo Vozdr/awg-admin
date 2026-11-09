@@ -34,6 +34,7 @@ class FakeRouterOS:
             "AWG_JC": "7", "AWG_JMIN": "10", "AWG_JMAX": "50", "AWG_S1": "20", "AWG_S2": "30",
             "AWG_H1": "1", "AWG_H2": "2", "AWG_H3": "3", "AWG_H4": "4",
             "AWG_SERVER_PUB": "server-public", "AWG_CLIENT_PUBS": "client-public",
+            "AWG_HEADER_PROTECTION_KEY": "visible-header-protection-key",
         }
 
     def print(self, menu, proplist=None):
@@ -276,6 +277,24 @@ def test_service_combines_multiple_container_envlists(monkeypatch):
     assert context.envlists == ["awg-base", "awg-clients"]
     assert context.env["AWG_MODE"] == "server"
     assert context.env["AWG_CLIENT_PUBS"] == "client-public"
+
+
+def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    service = AwgAdminService(Settings.from_env(), FakeRouterOS())
+    settings = service.server_settings()["settings"]
+    by_key = {item["key"]: item for item in settings}
+
+    assert by_key["Container status"]["value_key"] == "server.running"
+    assert by_key["Occupied addresses"]["value"] == "192.168.177.2/32"
+    assert by_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
+    assert "sensitive" not in by_key["AWG_HEADER_PROTECTION_KEY"]
+    assert by_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
+    assert by_key["AWG_CLIENT_PUBS"]["managed"] is True
 
 
 def test_service_uses_only_private_key_from_show_client_config(monkeypatch):

@@ -77,6 +77,44 @@ AWG_ENV_TO_CONFIG = {
     "AWG_MAX_HANDSHAKE_ATTEMPTS": "MaxHandshakeAttempts",
 }
 
+AWG_ENV_DESCRIPTION_KEYS = {
+    "AWG_MODE": "serverSettings.env.mode",
+    "AWG_LISTEN": "serverSettings.env.listen",
+    "AWG_REMOTE": "serverSettings.env.remote",
+    "AWG_JC": "serverSettings.env.jc",
+    "AWG_JMIN": "serverSettings.env.jmin",
+    "AWG_JMAX": "serverSettings.env.jmax",
+    "AWG_S1": "serverSettings.env.s1",
+    "AWG_S2": "serverSettings.env.s2",
+    "AWG_S3": "serverSettings.env.s3",
+    "AWG_S4": "serverSettings.env.s4",
+    "AWG_H1": "serverSettings.env.h",
+    "AWG_H2": "serverSettings.env.h",
+    "AWG_H3": "serverSettings.env.h",
+    "AWG_H4": "serverSettings.env.h",
+    "AWG_I1": "serverSettings.env.i",
+    "AWG_I2": "serverSettings.env.i",
+    "AWG_I3": "serverSettings.env.i",
+    "AWG_I4": "serverSettings.env.i",
+    "AWG_I5": "serverSettings.env.i",
+    "AWG_SERVER_PUB": "serverSettings.env.serverPublicKey",
+    "AWG_CLIENT_PUB": "serverSettings.env.clientPublicKey",
+    "AWG_CLIENT_PUBS": "serverSettings.env.clientPublicKeys",
+    "AWG_CLIENT_PUBS_FILE": "serverSettings.env.clientPublicKeysFile",
+    "AWG_HEADER_PROTECTION_KEY": "serverSettings.env.headerProtectionKey",
+    "AWG_RANDOM_TRAILERS": "serverSettings.env.randomTrailers",
+    "AWG_DISABLE_COOKIES": "serverSettings.env.disableCookies",
+    "AWG_REJECT_AFTER": "serverSettings.env.acceptedNotApplied",
+    "AWG_CONTENT_PADDING": "serverSettings.env.acceptedNotApplied",
+    "AWG_REKEY_AFTER": "serverSettings.env.acceptedNotApplied",
+    "AWG_REKEY_TIMEOUT": "serverSettings.env.acceptedNotApplied",
+    "AWG_KEEPALIVE_TIMEOUT": "serverSettings.env.acceptedNotApplied",
+    "AWG_MAX_HANDSHAKE_ATTEMPTS": "serverSettings.env.acceptedNotApplied",
+    "AWG_LOG_LEVEL": "serverSettings.env.logLevel",
+    "AWG_STATS": "serverSettings.env.stats",
+    "AWG_SPIN": "serverSettings.env.spin",
+}
+
 METADATA_RE = re.compile(r"\s*\[awg-admin:v1(?:;disabled_at=([^\]]+))?\]\s*$")
 MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
 
@@ -661,18 +699,31 @@ class AwgAdminService:
 
     def server_settings(self) -> dict[str, Any]:
         context = self.load_context(validate=False)
+        occupied_addresses = sorted(
+            {
+                peer.get("allowed-address", "") or peer.get("client-address", "")
+                for peer in context.peers
+                if peer.get("allowed-address", "") or peer.get("client-address", "")
+            }
+        )
         rows: list[dict[str, Any]] = [
-            {"key": "Container", "label_key": "serverSettings.container", "value": self.settings.awg_container_name, "sensitive": False},
-            {"key": "Container status", "label_key": "serverSettings.containerStatus", "value": context.container.get("status", "unknown"), "sensitive": False},
-            {"key": "WireGuard interface", "label_key": "serverSettings.interface", "value": context.wireguard.get("name", ""), "sensitive": False},
-            {"key": "WireGuard public key", "label_key": "serverSettings.publicKey", "value": context.wireguard.get("public-key", ""), "sensitive": False},
-            {"key": "WireGuard listen port", "label_key": "serverSettings.listenPort", "value": context.wireguard.get("listen-port", ""), "sensitive": False},
-            {"key": "Client endpoint", "label_key": "serverSettings.clientEndpoint", "value": self.settings.awg_client_endpoint, "sensitive": False},
-            {"key": "Addresses", "label_key": "serverSettings.addresses", "value": ", ".join(item.get("address", "") for item in context.addresses), "sensitive": False},
+            {"key": "Container", "label_key": "serverSettings.container", "value": self.settings.awg_container_name, "section": "general"},
+            {"key": "Container status", "label_key": "serverSettings.containerStatus", "value_key": "server.running" if self._container_running(context.container) else "server.stopped", "section": "general"},
+            {"key": "WireGuard interface", "label_key": "serverSettings.interface", "value": context.wireguard.get("name", ""), "section": "general"},
+            {"key": "WireGuard listen port", "label_key": "serverSettings.listenPort", "description_key": "serverSettings.listenPortHelp", "value": context.wireguard.get("listen-port", ""), "section": "general"},
+            {"key": "Client endpoint", "label_key": "serverSettings.clientEndpoint", "value": self.settings.awg_client_endpoint, "section": "general"},
+            {"key": "Addresses", "label_key": "serverSettings.addresses", "value": ", ".join(item.get("address", "") for item in context.addresses), "section": "general"},
+            {"key": "Occupied addresses", "label_key": "serverSettings.occupiedAddresses", "value": ", ".join(occupied_addresses), "section": "general"},
         ]
-        sensitive_keys = {"AWG_HEADER_PROTECTION_KEY"}
         for key in sorted(context.env):
-            rows.append({"key": key, "label_key": "", "value": context.env[key], "sensitive": key in sensitive_keys})
+            rows.append({
+                "key": key,
+                "label_key": "",
+                "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, "serverSettings.env.unknown"),
+                "value": context.env[key],
+                "section": "environment",
+                "managed": key in {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"},
+            })
         return {"settings": rows, "editable": False}
 
     def _env_records(self, context: ServerContext, key: str) -> list[dict[str, str]]:
