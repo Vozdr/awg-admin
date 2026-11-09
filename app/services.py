@@ -722,7 +722,7 @@ class AwgAdminService:
                 "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, "serverSettings.env.unknown"),
                 "value": context.env[key],
                 "section": "environment",
-                "managed": key in {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"},
+                "managed": key == "AWG_CLIENT_PUBS",
             })
         return {"settings": rows, "editable": False}
 

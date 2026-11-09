@@ -33,7 +33,7 @@ class FakeRouterOS:
             "AWG_MODE": "server", "AWG_LISTEN": "0.0.0.0:51820", "AWG_REMOTE": "0.0.0.0:51820",
             "AWG_JC": "7", "AWG_JMIN": "10", "AWG_JMAX": "50", "AWG_S1": "20", "AWG_S2": "30",
             "AWG_H1": "1", "AWG_H2": "2", "AWG_H3": "3", "AWG_H4": "4",
-            "AWG_SERVER_PUB": "server-public", "AWG_CLIENT_PUBS": "client-public",
+            "AWG_SERVER_PUB": "server-public", "AWG_CLIENT_PUB": "legacy-fallback", "AWG_CLIENT_PUBS": "client-public",
             "AWG_HEADER_PROTECTION_KEY": "visible-header-protection-key",
         }
 
@@ -294,6 +294,7 @@ def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
     assert by_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
     assert "sensitive" not in by_key["AWG_HEADER_PROTECTION_KEY"]
     assert by_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
+    assert by_key["AWG_CLIENT_PUB"]["managed"] is False
     assert by_key["AWG_CLIENT_PUBS"]["managed"] is True
 
 
