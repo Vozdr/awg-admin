@@ -52,9 +52,9 @@ Wait until the container is `stopped`, then start it:
 /container/start [find where name="awg-admin"]
 ```
 
-The panel listens on TCP port `8080` at the container address. Port publishing, firewall policy, and the access path are intentionally left to the user. `AWG_CLIENT_ENDPOINT` is used only to generate client configurations and is never probed.
+The panel listens on TCP port `8080` at the container address. `AWG_CLIENT_ENDPOINT` is used only to generate client configurations and is never probed.
 
-RouterOS generates `SESSION_SECRET` once and stores it in the envlist, so active panel sessions survive container restarts. The basic example does not set `root-dir`, `layer-dir`, or `tmpdir`; users can place the container on a storage device of their choice when needed.
+RouterOS generates `SESSION_SECRET` once and stores it in the envlist, so active panel sessions survive container restarts.
 
 Set `AWG_CONTAINER_NAME` when the proxy container is not named `wg-awg-server-1`. See the [environment reference](docs/ENVIRONMENT_EN.md) for every option.
 
