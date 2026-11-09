@@ -28,7 +28,7 @@ Create a dedicated group and user. AWG Admin needs only `read`, `write`, `sensit
 /user/add name=awg-admin group=awg-admin password="CHANGE_ME" address=172.17.0.2/32
 ```
 
-The panel uses a dedicated veth without a bridge. MikroTik uses `172.17.0.1` on this network and the container uses `172.17.0.2`:
+In this example, MikroTik uses `172.17.0.1` and the container uses `172.17.0.2`:
 
 ```routeros
 /interface/veth/add name=veth-awg-admin address=172.17.0.2/24 gateway=172.17.0.1

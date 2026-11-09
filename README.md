@@ -28,7 +28,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 /user/add name=awg-admin group=awg-admin password="ЗАМЕНИТЕ_ПАРОЛЬ" address=172.17.0.2/32
 ```
 
-Для панели создаётся отдельный veth без bridge. Адрес MikroTik в этой сети — `172.17.0.1`, адрес контейнера — `172.17.0.2`:
+В примере адрес MikroTik — `172.17.0.1`, адрес контейнера — `172.17.0.2`:
 
 ```routeros
 /interface/veth/add name=veth-awg-admin address=172.17.0.2/24 gateway=172.17.0.1
