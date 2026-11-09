@@ -9,13 +9,11 @@ The panel has no database or local configuration files. Clients, comments, addre
 Features:
 
 - allocate the first free IPv4 address from a selected WireGuard interface subnet;
-- edit the name, comment, DNS, AllowedIPs, keepalive, and PresharedKey;
-- enable, disable, and delete peers;
-- display private configs, QR codes, and `vpn://` links again;
-- show handshake, endpoint, RX, and TX statistics;
+- add, enable, disable, and delete peers;
+- generate a QR code, `.conf` file, and configuration link for a peer;
+- show statistics for each peer;
 - inspect AWG server settings;
-- English and Russian UI with dark and light themes;
-- `linux/amd64`, `linux/arm64`, and `linux/arm/v7` images.
+- interface localization.
 
 ## Quick start on MikroTik
 
