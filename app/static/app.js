@@ -12,6 +12,18 @@ const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
 
 function t(key, vars={}) { let value=state.dict[key] || key; Object.entries(vars).forEach(([name,replacement]) => value=value.replaceAll(`{${name}}`, replacement ?? "")); return value; }
 function escapeHtml(value) { return String(value ?? "").replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char])); }
+function highlightSearch(value, query) {
+  const text=String(value ?? "");
+  if (!query) return escapeHtml(text);
+  const pattern=new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"giu");
+  let result="",lastIndex=0;
+  for (const match of text.matchAll(pattern)) {
+    result+=escapeHtml(text.slice(lastIndex,match.index));
+    result+=`<mark class="search-highlight">${escapeHtml(match[0])}</mark>`;
+    lastIndex=match.index+match[0].length;
+  }
+  return result+escapeHtml(text.slice(lastIndex));
+}
 function localeDate(value, options={}) { if (!value) return ""; const date=new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(t("format.locale"), options).format(date); }
 function normalizeKeepalive(value) { return Number.parseInt(String(value || "0"),10) || 0; }
 function handshakeSeconds(value) { const match=String(value || "").match(/(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/); return match ? (((+match[1]||0)*604800)+((+match[2]||0)*86400)+((+match[3]||0)*3600)+((+match[4]||0)*60)+(+match[5]||0)) : 0; }
@@ -47,11 +59,11 @@ function renderDashboard() {
 }
 function sortValue(client, field) { if (field==="disabled") return client.disabled?1:0; if (field==="rx") return Number(client.rx||0)+Number(client.tx||0); if (field==="last_handshake") return handshakeSeconds(client.last_handshake); return String(client[field]||"").toLocaleLowerCase(state.lang); }
 function renderClients() {
-  const all=state.dashboard?.clients||[], query=$("#clientSearch").value.trim().toLowerCase();
+  const all=state.dashboard?.clients||[], query=$("#clientSearch").value.trim(), normalizedQuery=query.toLocaleLowerCase(state.lang);
   let clients=all.filter(item => state.filter==="all" || (state.filter==="disabled" ? item.disabled : !item.disabled));
-  clients=clients.filter(item => [item.name,item.comment,item.address].join(" ").toLowerCase().includes(query));
+  clients=clients.filter(item => [item.name,item.comment,item.address].join(" ").toLocaleLowerCase(state.lang).includes(normalizedQuery));
   clients.sort((a,b) => { const av=sortValue(a,state.sort.field),bv=sortValue(b,state.sort.field); const result=typeof av==="number"?av-bv:String(av).localeCompare(String(bv),state.lang,{numeric:true,sensitivity:"base"}); return state.sort.direction==="asc"?result:-result; });
-  $("#clientsBody").innerHTML=clients.map(client=>`<tr data-id="${escapeHtml(client.id)}"><td><div class="client-name"><strong>${escapeHtml(client.name)}</strong>${client.comment?`<small>${escapeHtml(client.comment)}</small>`:""}</div></td><td>${escapeHtml(client.address||"—")}</td><td><div class="status-cell"><button class="row-button toggle-button" data-action="toggle" title="${t(client.disabled?"clients.enable":"clients.disable")}">${client.disabled?"▶":"Ⅱ"}</button><div><span class="status-pill ${client.disabled?"disabled":""}">${t(client.disabled?"clients.disabled":"clients.enabled")}</span>${client.disabled_at?`<small class="disabled-at">${escapeHtml(localeDate(client.disabled_at,{dateStyle:"short",timeStyle:"short"}))}</small>`:""}</div></div></td><td>${escapeHtml(formatHandshake(client.last_handshake))}</td><td><div class="traffic"><span class="rx">${escapeHtml(client.rx_human)}</span><span class="tx">${escapeHtml(client.tx_human)}</span></div></td><td><div class="row-actions"><button class="row-button" data-action="config" title="${t("clients.showConfig")}">▦</button><button class="row-button" data-action="edit" title="${t("common.edit")}">✎</button><span class="action-separator"></span><button class="row-button delete-button" data-action="delete" title="${t("common.delete")}">♲</button></div></td></tr>`).join("");
+  $("#clientsBody").innerHTML=clients.map(client=>`<tr data-id="${escapeHtml(client.id)}"><td><div class="client-name"><strong>${highlightSearch(client.name,query)}</strong>${client.comment?`<small>${highlightSearch(client.comment,query)}</small>`:""}</div></td><td>${highlightSearch(client.address||"—",query)}</td><td><div class="status-cell"><button class="row-button toggle-button" data-action="toggle" title="${t(client.disabled?"clients.enable":"clients.disable")}">${client.disabled?"▶":"Ⅱ"}</button><div><span class="status-pill ${client.disabled?"disabled":""}">${t(client.disabled?"clients.disabled":"clients.enabled")}</span>${client.disabled_at?`<small class="disabled-at">${escapeHtml(localeDate(client.disabled_at,{dateStyle:"short",timeStyle:"short"}))}</small>`:""}</div></div></td><td>${escapeHtml(formatHandshake(client.last_handshake))}</td><td><div class="traffic"><span class="rx">${escapeHtml(client.rx_human)}</span><span class="tx">${escapeHtml(client.tx_human)}</span></div></td><td><div class="row-actions"><button class="row-button" data-action="config" title="${t("clients.showConfig")}">▦</button><button class="row-button" data-action="edit" title="${t("common.edit")}">✎</button><span class="action-separator"></span><button class="row-button delete-button" data-action="delete" title="${t("common.delete")}">♲</button></div></td></tr>`).join("");
   const empty=clients.length===0; $("#emptyState").classList.toggle("hidden",!empty); $("#emptyTitle").textContent=t(all.length?"clients.noMatches":"clients.empty"); $("#emptyHint").textContent=t(all.length?"clients.noMatchesHint":"clients.emptyHint");
   $$('.summary-card').forEach(card=>card.classList.toggle("active",card.dataset.filter===state.filter));
   $$('.sortable').forEach(th=>{ th.classList.toggle("active",th.dataset.sort===state.sort.field); const icon=$("i",th); icon.textContent=th.dataset.sort===state.sort.field?(state.sort.direction==="asc"?"↑":"↓"):"↕"; });
