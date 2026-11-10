@@ -18,7 +18,14 @@ from fastapi.exceptions import RequestValidationError
 from .auth import SESSION_COOKIE, SESSION_MAX_AGE, AuthManager, client_address
 from .errors import AppError, unknown_error
 from .i18n import Locales
-from .models import ClientCreate, ClientToggle, ClientUpdate, SyncRequest
+from .models import (
+    ClientCreate,
+    ClientToggle,
+    ClientUpdate,
+    EnvVariableValidation,
+    ServerSettingsUpdate,
+    SyncRequest,
+)
 from .registry import ServerRegistry, ServerRuntime
 from .settings import Settings, SettingsError
 
@@ -253,6 +260,24 @@ async def server_settings(
     _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)
 ) -> dict[str, Any]:
     return await run_in_threadpool(runtime.service.server_settings)
+
+
+@app.post("/api/server/settings/validate-variable")
+async def validate_server_variable(
+    data: EnvVariableValidation,
+    _: str = Depends(auth.require_write_auth),
+    runtime: ServerRuntime = Depends(selected_runtime),
+) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.validate_env_variable, data.envlist, data.key)
+
+
+@app.put("/api/server/settings")
+async def update_server_settings(
+    data: ServerSettingsUpdate,
+    _: str = Depends(auth.require_write_auth),
+    runtime: ServerRuntime = Depends(selected_runtime),
+) -> dict[str, Any]:
+    return await run_in_threadpool(runtime.service.update_server_settings, data)
 
 
 @app.get("/api/clients/{peer_id}/config")

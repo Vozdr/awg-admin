@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import ipaddress
 import io
 import json
@@ -19,7 +20,7 @@ import qrcode
 from qrcode.image.svg import SvgPathImage
 
 from .errors import AppError
-from .models import ClientCreate, ClientUpdate
+from .models import ClientCreate, ClientUpdate, ServerSettingsUpdate
 from .routeros import RouterOSClient
 from .settings import ServerSettings
 
@@ -123,6 +124,7 @@ MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
 class ServerContext:
     container: dict[str, str]
     env_records: list[dict[str, str]]
+    all_env_records: list[dict[str, str]]
     env: dict[str, str]
     wireguard: dict[str, str]
     addresses: list[dict[str, str]]
@@ -467,7 +469,9 @@ class AwgAdminService:
                     hint_key="error.containerNotFoundHint",
                 )
             self.container_running = self._container_running(container)
-            all_env_records = self.client.print(ENV_MENU, proplist=(".id", "list", "key", "value"))
+            all_env_records = self.client.print(
+                ENV_MENU, proplist=(".id", "list", "key", "value", "comment", "disabled")
+            )
             envlists = split_values(container.get("envlists", "") or container.get("envlist", ""))
             if not envlists:
                 raise AppError(
@@ -505,7 +509,7 @@ class AwgAdminService:
                 )
             interfaces = self.client.print(
                 WG_MENU,
-                proplist=(".id", "name", "listen-port", "public-key", "disabled", "running", "mtu"),
+                proplist=(".id", "name", "listen-port", "public-key", "private-key", "disabled", "running", "mtu"),
             )
             matches = [item for item in interfaces if item.get("public-key") == env.get("AWG_SERVER_PUB")]
             if len(matches) != 1:
@@ -570,7 +574,7 @@ class AwgAdminService:
                 )
                 if item.get("interface") == wireguard.get("name")
             ]
-            context = ServerContext(container, env_records, env, wireguard, addresses, peers)
+            context = ServerContext(container, env_records, all_env_records, env, wireguard, addresses, peers)
             self._remember_success()
             return context
         except AppError as exc:
@@ -721,21 +725,277 @@ class AwgAdminService:
             {"key": "Container", "label_key": "serverSettings.container", "value": self.settings.awg_container_name, "section": "general"},
             {"key": "Container status", "label_key": "serverSettings.containerStatus", "value_key": "server.running" if self._container_running(context.container) else "server.stopped", "section": "general"},
             {"key": "WireGuard interface", "label_key": "serverSettings.interface", "value": context.wireguard.get("name", ""), "section": "general"},
-            {"key": "WireGuard listen port", "label_key": "serverSettings.listenPort", "description_key": "serverSettings.listenPortHelp", "value": context.wireguard.get("listen-port", ""), "section": "general"},
+            {"key": "WireGuard listen port", "label_key": "serverSettings.listenPort", "description_key": "serverSettings.listenPortHelp", "value": context.wireguard.get("listen-port", ""), "section": "general", "editable": True, "kind": "port"},
             {"key": "Client endpoint", "label_key": "serverSettings.clientEndpoint", "value": self.settings.awg_client_endpoint, "section": "general"},
-            {"key": "Addresses", "label_key": "serverSettings.addresses", "value": ", ".join(item.get("address", "") for item in context.addresses), "section": "general"},
+            {"key": "Addresses", "label_key": "serverSettings.addresses", "value": ", ".join(item.get("address", "") for item in context.addresses), "section": "general", "editable": True, "kind": "addresses"},
             {"key": "Occupied addresses", "label_key": "serverSettings.occupiedAddresses", "value": ", ".join(occupied_addresses), "section": "general"},
         ]
-        for key in sorted(context.env):
-            rows.append({
+        key_counts: dict[str, int] = {}
+        list_key_counts: dict[tuple[str, str], int] = {}
+        for record in context.env_records:
+            key = record.get("key", "")
+            envlist = record.get("list", "")
+            key_counts[key] = key_counts.get(key, 0) + 1
+            list_key_counts[(envlist, key)] = list_key_counts.get((envlist, key), 0) + 1
+        managed_keys = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"}
+        read_only_keys = managed_keys | {"AWG_REMOTE"}
+        env_rows: list[dict[str, Any]] = []
+        for record in sorted(context.env_records, key=lambda item: (item.get("key", ""), item.get("list", ""), item.get(".id", ""))):
+            key = record.get("key", "")
+            envlist = record.get("list", "")
+            env_rows.append({
+                "id": record.get(".id", ""),
                 "key": key,
-                "label_key": "",
-                "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, "serverSettings.env.unknown"),
-                "value": context.env[key],
-                "section": "environment",
-                "managed": key == "AWG_CLIENT_PUBS",
+                "envlist": envlist,
+                "value": record.get("value", ""),
+                "comment": record.get("comment", ""),
+                "disabled": bool_value(record.get("disabled", "")),
+                "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, ""),
+                "managed": key in managed_keys,
+                "read_only": key in read_only_keys or key == "AWG_SERVER_PUB",
+                "special_action": "regenerate-key" if key == "AWG_SERVER_PUB" else "",
+                "duplicate": key_counts.get(key, 0) > 1,
+                "duplicate_in_list": list_key_counts.get((envlist, key), 0) > 1,
             })
-        return {"settings": rows, "editable": False}
+        return {
+            "settings": rows,
+            "environment": env_rows,
+            "envlists": context.envlists,
+            "existing_envlists": sorted({item.get("list", "") for item in context.all_env_records if item.get("list")}),
+            "addresses": [{"id": item.get(".id", ""), "address": item.get("address", "")} for item in context.addresses],
+            "revision": self._settings_revision(context),
+            "editable": True,
+        }
+
+    def _settings_revision(self, context: ServerContext) -> str:
+        payload = {
+            "envlists": context.envlists,
+            "environment": sorted(
+                [
+                    {
+                        "id": item.get(".id", ""),
+                        "list": item.get("list", ""),
+                        "key": item.get("key", ""),
+                        "value": item.get("value", ""),
+                        "comment": item.get("comment", ""),
+                        "disabled": bool_value(item.get("disabled", "")),
+                    }
+                    for item in context.env_records
+                ],
+                key=lambda item: (item["id"], item["list"], item["key"]),
+            ),
+            "addresses": sorted(
+                [{"id": item.get(".id", ""), "address": item.get("address", "")} for item in context.addresses],
+                key=lambda item: item["id"],
+            ),
+            "wireguard": {
+                "id": context.wireguard.get(".id", ""),
+                "listen_port": context.wireguard.get("listen-port", ""),
+                "public_key": context.wireguard.get("public-key", ""),
+            },
+        }
+        raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def validate_env_variable(self, envlist: str, key: str) -> dict[str, Any]:
+        context = self.load_context(validate=False)
+        existing_lists = {item.get("list", "") for item in context.all_env_records if item.get("list")}
+        if envlist in existing_lists and envlist not in context.envlists:
+            raise AppError(
+                "ENVLIST_NOT_ASSIGNED",
+                "error.envlistNotAssigned",
+                technical=f"envlist {envlist!r} exists but is not assigned to container {self.settings.awg_container_name!r}",
+                status_code=409,
+            )
+        duplicates = [
+            item for item in context.all_env_records
+            if item.get("list") in context.envlists and item.get("key") == key
+        ]
+        duplicates_in_list = [item for item in duplicates if item.get("list") == envlist]
+        return {
+            "ok": True,
+            "new_envlist": envlist not in existing_lists,
+            "duplicate": bool(duplicates),
+            "duplicate_count": len(duplicates),
+            "duplicate_in_list": bool(duplicates_in_list),
+        }
+
+    @staticmethod
+    def _replace_endpoint_port(value: str, port: int) -> str:
+        host, separator, _ = value.rpartition(":")
+        if not separator or not host:
+            raise AppError("AWG_REMOTE_INVALID", "error.awgRemoteInvalid", technical=value, status_code=422)
+        return f"{host}:{port}"
+
+    @staticmethod
+    def _validate_interface_address(value: str) -> str:
+        try:
+            address = ipaddress.ip_interface(value.strip())
+        except ValueError as exc:
+            raise AppError("SERVER_ADDRESS_INVALID", "error.serverAddressInvalid", technical=value, status_code=422) from exc
+        if address.version != 4:
+            raise AppError("SERVER_ADDRESS_INVALID", "error.serverAddressInvalid", technical=value, status_code=422)
+        return str(address)
+
+    def _wait_container(self, container_id: str, running: bool, timeout: int) -> None:
+        deadline = time.monotonic() + timeout
+        last_status = ""
+        while time.monotonic() < deadline:
+            records = self.client.print(CONTAINER_MENU, proplist=(".id", "status", "running"))
+            current = next((item for item in records if item.get(".id") == container_id), None)
+            if not current:
+                raise AppError("AWG_CONTAINER_NOT_FOUND", "error.containerNotFound", status_code=503)
+            last_status = current.get("status", "")
+            if self._container_running(current) is running:
+                return
+            time.sleep(1)
+        raise AppError(
+            "PROXY_RESTART_FAILED",
+            "error.proxyRestartFailed",
+            technical=f"container did not become {'running' if running else 'stopped'}; status: {last_status or 'unknown'}",
+            status_code=502,
+            hint_key="error.proxyRestartFailedHint",
+        )
+
+    def update_server_settings(self, data: ServerSettingsUpdate) -> dict[str, Any]:
+        with self.operation_lock:
+            context = self.load_context(validate=False)
+            if data.revision != self._settings_revision(context):
+                raise AppError(
+                    "SERVER_SETTINGS_CONFLICT",
+                    "error.serverSettingsConflict",
+                    technical="MikroTik settings changed after the dialog was opened",
+                    status_code=409,
+                )
+            current_by_id = {item.get(".id", ""): item for item in context.env_records}
+            address_by_id = {item.get(".id", ""): item for item in context.addresses}
+            protected = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB"}
+            new_lists: list[str] = []
+            for change in data.env_changes:
+                if change.action == "add":
+                    self.validate_env_variable(change.envlist, change.key)
+                    if change.key in protected:
+                        raise AppError("ENV_VARIABLE_MANAGED", "error.envVariableManaged", technical=change.key, status_code=422)
+                    if change.envlist not in context.envlists and change.envlist not in new_lists:
+                        new_lists.append(change.envlist)
+                else:
+                    current = current_by_id.get(change.id)
+                    if not current:
+                        raise AppError("ENV_VARIABLE_NOT_FOUND", "error.envVariableNotFound", technical=change.id, status_code=409)
+                    if current.get("key") in protected:
+                        raise AppError("ENV_VARIABLE_MANAGED", "error.envVariableManaged", technical=current.get("key", ""), status_code=422)
+            normalized_addresses: dict[int, str] = {}
+            for index, change in enumerate(data.address_changes):
+                if change.action != "add" and change.id not in address_by_id:
+                    raise AppError("SERVER_ADDRESS_NOT_FOUND", "error.serverAddressNotFound", technical=change.id, status_code=409)
+                if change.action != "delete":
+                    normalized_addresses[index] = self._validate_interface_address(change.address)
+            final_addresses = {
+                self._validate_interface_address(item.get("address", ""))
+                for item in context.addresses
+                if not any(change.id == item.get(".id") and change.action == "delete" for change in data.address_changes)
+            }
+            for index, value in normalized_addresses.items():
+                change = data.address_changes[index]
+                if change.action == "update":
+                    final_addresses.discard(self._validate_interface_address(address_by_id[change.id].get("address", "")))
+                if value in final_addresses:
+                    raise AppError("SERVER_ADDRESS_DUPLICATE", "error.serverAddressDuplicate", technical=value, status_code=409)
+                final_addresses.add(value)
+            if not final_addresses:
+                raise AppError("SERVER_ADDRESSES_EMPTY", "error.serverAddressesEmpty", status_code=422)
+
+            changes_requested = bool(data.env_changes or data.address_changes or data.regenerate_server_key or data.listen_port is not None)
+            if not changes_requested:
+                return self.server_settings()
+            container_id = context.container.get(".id", "")
+            was_running = self._container_running(context.container)
+            if was_running:
+                self.client.action(CONTAINER_MENU, "stop", container_id)
+                self._wait_container(container_id, False, 20)
+            undo_actions: list[Any] = []
+            try:
+                for change in data.env_changes:
+                    if change.action == "add":
+                        new_id = self.client.add(ENV_MENU, {
+                            "list": change.envlist,
+                            "key": change.key,
+                            "value": change.value,
+                            "comment": change.comment,
+                            "disabled": "yes" if change.disabled else "no",
+                        })
+                        if new_id:
+                            undo_actions.append(lambda item_id=new_id: self.client.remove(ENV_MENU, item_id))
+                    elif change.action == "delete":
+                        old = dict(current_by_id[change.id])
+                        self.client.remove(ENV_MENU, change.id)
+                        undo_actions.append(lambda record=old: self.client.add(ENV_MENU, {
+                            "list": record.get("list", ""), "key": record.get("key", ""),
+                            "value": record.get("value", ""), "comment": record.get("comment", ""),
+                            "disabled": record.get("disabled", "no"),
+                        }))
+                    else:
+                        old = dict(current_by_id[change.id])
+                        self.client.set(ENV_MENU, change.id, {
+                            "value": change.value,
+                            "comment": change.comment,
+                            "disabled": "yes" if change.disabled else "no",
+                        })
+                        undo_actions.append(lambda item_id=change.id, record=old: self.client.set(ENV_MENU, item_id, {
+                            "value": record.get("value", ""), "comment": record.get("comment", ""),
+                            "disabled": record.get("disabled", "no"),
+                        }))
+                if new_lists:
+                    envlists = context.envlists + [item for item in new_lists if item not in context.envlists]
+                    self.client.set(CONTAINER_MENU, container_id, {"envlists": ",".join(envlists)})
+                    undo_actions.append(lambda: self.client.set(CONTAINER_MENU, container_id, {"envlists": ",".join(context.envlists)}))
+                for index, change in enumerate(data.address_changes):
+                    if change.action == "add":
+                        new_id = self.client.add(ADDRESS_MENU, {"address": normalized_addresses[index], "interface": context.wireguard.get("name", "")})
+                        if new_id:
+                            undo_actions.append(lambda item_id=new_id: self.client.remove(ADDRESS_MENU, item_id))
+                    elif change.action == "delete":
+                        old = dict(address_by_id[change.id])
+                        self.client.remove(ADDRESS_MENU, change.id)
+                        undo_actions.append(lambda record=old: self.client.add(ADDRESS_MENU, {
+                            "address": record.get("address", ""), "interface": record.get("interface", context.wireguard.get("name", "")),
+                            "disabled": record.get("disabled", "no"),
+                        }))
+                    else:
+                        old_address = address_by_id[change.id].get("address", "")
+                        self.client.set(ADDRESS_MENU, change.id, {"address": normalized_addresses[index]})
+                        undo_actions.append(lambda item_id=change.id, value=old_address: self.client.set(ADDRESS_MENU, item_id, {"address": value}))
+                if data.listen_port is not None and str(data.listen_port) != context.wireguard.get("listen-port", ""):
+                    self.client.set(WG_MENU, context.wireguard.get(".id", ""), {"listen-port": data.listen_port})
+                    undo_actions.append(lambda: self.client.set(WG_MENU, context.wireguard.get(".id", ""), {"listen-port": context.wireguard.get("listen-port", "")}))
+                    for record in self._env_records(context, "AWG_REMOTE"):
+                        self.client.set(ENV_MENU, record[".id"], {"value": self._replace_endpoint_port(record.get("value", ""), data.listen_port)})
+                        undo_actions.append(lambda item_id=record[".id"], value=record.get("value", ""): self.client.set(ENV_MENU, item_id, {"value": value}))
+                if data.regenerate_server_key:
+                    private_key, public_key = generate_wireguard_key_pair()
+                    self.client.set(WG_MENU, context.wireguard.get(".id", ""), {"private-key": private_key})
+                    if context.wireguard.get("private-key"):
+                        undo_actions.append(lambda: self.client.set(WG_MENU, context.wireguard.get(".id", ""), {"private-key": context.wireguard.get("private-key", "")}))
+                    for record in self._env_records(context, "AWG_SERVER_PUB"):
+                        self.client.set(ENV_MENU, record[".id"], {"value": public_key})
+                        undo_actions.append(lambda item_id=record[".id"], value=record.get("value", ""): self.client.set(ENV_MENU, item_id, {"value": value}))
+                if was_running:
+                    self.client.action(CONTAINER_MENU, "start", container_id)
+                    self._wait_container(container_id, True, 30)
+            except Exception:
+                for undo in reversed(undo_actions):
+                    try:
+                        undo()
+                    except Exception:
+                        LOGGER.exception("Failed to roll back an AWG server settings change")
+                if was_running:
+                    try:
+                        self.client.action(CONTAINER_MENU, "start", container_id)
+                    except Exception:
+                        LOGGER.exception("Failed to restart AWG container after settings update error")
+                raise
+            self._remember_success()
+            return self.server_settings()
 
     def _env_records(self, context: ServerContext, key: str) -> list[dict[str, str]]:
         records = [item for item in context.env_records if item.get("key") == key]

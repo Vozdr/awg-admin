@@ -26,6 +26,7 @@ from app.services import (
     wireguard_public_key,
 )
 from app.settings import Settings, SettingsError
+from app.models import ServerSettingsUpdate
 
 
 class FakeRouterOS:
@@ -55,6 +56,81 @@ class FakeRouterOS:
         if menu == "interface/wireguard/peers":
             return [{".id": "*4", "name": "Alice", "comment": "Phone", "interface": "wg-awg", "disabled": "false", "public-key": "client-public", "allowed-address": "192.168.177.2/32", "client-address": "192.168.177.2/24", "rx": "1024", "tx": "2048"}]
         raise AssertionError(menu)
+
+
+class MutableRouterOS(FakeRouterOS):
+    def __init__(self):
+        super().__init__()
+        self.envlists = ["awg-base", "awg-clients"]
+        self.env_records = [
+            {".id": f"*e{index}", "list": "awg-clients" if key == "AWG_CLIENT_PUBS" else "awg-base", "key": key, "value": value, "comment": "", "disabled": "no"}
+            for index, (key, value) in enumerate(self.env.items())
+        ]
+        self.addresses = [{".id": "*3", "address": "192.168.177.1/24", "network": "192.168.177.0", "interface": "wg-awg", "disabled": "false"}]
+        self.wireguard = {".id": "*2", "name": "wg-awg", "listen-port": "51820", "public-key": "server-public", "private-key": "", "disabled": "false", "running": "true"}
+        self.container_status = "running"
+        self.next_id = 100
+
+    def print(self, menu, proplist=None):
+        if menu == "container":
+            return [{".id": "*1", "name": "wg-awg-server-1", "status": self.container_status, "running": str(self.container_status == "running").lower(), "envlists": ",".join(self.envlists)}]
+        if menu == "container/envs":
+            return [dict(item) for item in self.env_records]
+        if menu == "interface/wireguard":
+            return [dict(self.wireguard)]
+        if menu == "ip/address":
+            return [dict(item) for item in self.addresses]
+        return super().print(menu, proplist)
+
+    def set(self, menu, item_id, values):
+        if menu == "container":
+            self.envlists = [item for item in str(values["envlists"]).split(",") if item]
+            return
+        if menu == "container/envs":
+            next(item for item in self.env_records if item[".id"] == item_id).update({key: str(value) for key, value in values.items()})
+            return
+        if menu == "interface/wireguard":
+            if "private-key" in values:
+                self.wireguard["private-key"] = str(values["private-key"])
+                self.wireguard["public-key"] = wireguard_public_key(str(values["private-key"]))
+            if "listen-port" in values:
+                self.wireguard["listen-port"] = str(values["listen-port"])
+            return
+        if menu == "ip/address":
+            next(item for item in self.addresses if item[".id"] == item_id).update({key: str(value) for key, value in values.items()})
+            return
+        raise AssertionError(menu)
+
+    def add(self, menu, values):
+        self.next_id += 1
+        item_id = f"*n{self.next_id}"
+        record = {".id": item_id, **{key: str(value) for key, value in values.items()}}
+        if menu == "container/envs":
+            self.env_records.append(record)
+        elif menu == "ip/address":
+            record.setdefault("disabled", "no")
+            self.addresses.append(record)
+        else:
+            raise AssertionError(menu)
+        return item_id
+
+    def remove(self, menu, item_id):
+        target = self.env_records if menu == "container/envs" else self.addresses if menu == "ip/address" else None
+        if target is None:
+            raise AssertionError(menu)
+        target[:] = [item for item in target if item[".id"] != item_id]
+
+    def action(self, menu, action, item_id):
+        assert menu == "container"
+        self.container_status = "stopped" if action == "stop" else "running"
+        return []
+
+
+class FailingSettingsRouterOS(MutableRouterOS):
+    def add(self, menu, values):
+        if menu == "ip/address":
+            raise AppError("MIKROTIK_API_ERROR", "error.mikrotikApiError", technical="simulated failure", status_code=502)
+        return super().add(menu, values)
 
 
 class FakeContainerStateRouterOS(FakeRouterOS):
@@ -366,16 +442,137 @@ def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
     service = AwgAdminService(Settings.from_env().primary_server, FakeRouterOS())
-    settings = service.server_settings()["settings"]
-    by_key = {item["key"]: item for item in settings}
+    result = service.server_settings()
+    by_key = {item["key"]: item for item in result["settings"]}
+    by_env_key = {item["key"]: item for item in result["environment"]}
 
     assert by_key["Container status"]["value_key"] == "server.running"
     assert by_key["Occupied addresses"]["value"] == "192.168.177.2/32"
-    assert by_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
-    assert "sensitive" not in by_key["AWG_HEADER_PROTECTION_KEY"]
-    assert by_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
-    assert by_key["AWG_CLIENT_PUB"]["managed"] is False
-    assert by_key["AWG_CLIENT_PUBS"]["managed"] is True
+    assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
+    assert "sensitive" not in by_env_key["AWG_HEADER_PROTECTION_KEY"]
+    assert by_env_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
+    assert by_env_key["AWG_CLIENT_PUB"]["managed"] is True
+    assert by_env_key["AWG_CLIENT_PUBS"]["managed"] is True
+    assert len(result["revision"]) == 64
+
+
+def test_server_settings_reject_existing_unassigned_envlist(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    router.env_records.append({".id": "*foreign", "list": "other-container", "key": "FOREIGN", "value": "1", "comment": "", "disabled": "no"})
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+
+    with pytest.raises(AppError) as raised:
+        service.validate_env_variable("other-container", "NEW_KEY")
+
+    assert raised.value.code == "ENVLIST_NOT_ASSIGNED"
+    assert service.validate_env_variable("new-unique-list", "NEW_KEY")["new_envlist"] is True
+
+
+def test_server_settings_apply_staged_changes_and_restart(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    jc = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+    payload = ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "listen_port": 51821,
+        "env_changes": [
+            {"action": "update", "id": jc["id"], "envlist": jc["envlist"], "key": jc["key"], "value": "9", "comment": "custom junk count", "disabled": False},
+            {"action": "add", "envlist": "awg-extra", "key": "AWG_EXTRA", "value": "enabled", "comment": "custom option", "disabled": False},
+        ],
+        "address_changes": [{"action": "update", "id": "*3", "address": "192.168.178.1/24"}],
+    })
+
+    result = service.update_server_settings(payload)
+
+    assert router.container_status == "running"
+    assert "awg-extra" in router.envlists
+    assert router.wireguard["listen-port"] == "51821"
+    assert next(item for item in router.env_records if item["key"] == "AWG_REMOTE")["value"].endswith(":51821")
+    assert next(item for item in router.env_records if item["key"] == "AWG_JC")["comment"] == "custom junk count"
+    assert next(item for item in router.env_records if item["key"] == "AWG_EXTRA")["list"] == "awg-extra"
+    assert router.addresses[0]["address"] == "192.168.178.1/24"
+    assert result["revision"] != current["revision"]
+
+
+def test_server_settings_do_not_start_stopped_container(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    router.container_status = "stopped"
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    row = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [{"action": "update", "id": row["id"], "envlist": row["envlist"], "key": row["key"], "value": "8", "comment": "", "disabled": False}],
+    }))
+
+    assert router.container_status == "stopped"
+    assert next(item for item in router.env_records if item["key"] == "AWG_JC")["value"] == "8"
+
+
+def test_server_settings_conflict_and_rollback(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = FailingSettingsRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    row = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+    router.env_records[0]["comment"] = "external change"
+    with pytest.raises(AppError) as conflict:
+        service.update_server_settings(ServerSettingsUpdate.parse_obj({"revision": current["revision"], "listen_port": 51822}))
+    assert conflict.value.code == "SERVER_SETTINGS_CONFLICT"
+
+    current = service.server_settings()
+    row = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+    with pytest.raises(AppError) as failure:
+        service.update_server_settings(ServerSettingsUpdate.parse_obj({
+            "revision": current["revision"],
+            "env_changes": [{"action": "update", "id": row["id"], "envlist": row["envlist"], "key": row["key"], "value": "99", "comment": "", "disabled": False}],
+            "address_changes": [{"action": "add", "address": "10.10.10.1/24"}],
+        }))
+    assert failure.value.code == "MIKROTIK_API_ERROR"
+    assert next(item for item in router.env_records if item["key"] == "AWG_JC")["value"] == "7"
+    assert router.container_status == "running"
+
+
+def test_server_key_regeneration_updates_interface_and_environment(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "regenerate_server_key": True,
+    }))
+
+    env_public = next(item for item in router.env_records if item["key"] == "AWG_SERVER_PUB")["value"]
+    assert env_public == router.wireguard["public-key"]
+    assert env_public != "server-public"
+    assert len(base64.b64decode(router.wireguard["private-key"])) == 32
 
 
 def test_service_uses_only_private_key_from_show_client_config(monkeypatch):

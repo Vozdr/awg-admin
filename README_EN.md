@@ -14,7 +14,7 @@ Features:
 - add, enable, disable, and delete peers;
 - generate a QR code, `.conf` file, and configuration link for a peer;
 - show statistics for each peer;
-- inspect AWG server settings;
+- inspect and edit AWG server settings;
 - manage multiple AWG servers from one panel;
 - interface localization.
 
