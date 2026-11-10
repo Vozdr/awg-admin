@@ -76,6 +76,7 @@ jobs:
             type=image,name=${{ env.DOCKERHUB_IMAGE }},push-by-digest=true,name-canonical=true,push=true
             type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           build-args: AWG_ADMIN_VERSION=${{ steps.version.outputs.value }}
+          provenance: false
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
       - name: Export digest
