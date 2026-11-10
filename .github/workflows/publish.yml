@@ -11,7 +11,6 @@ permissions:
   packages: write
 
 env:
-  DOCKERHUB_IMAGE: w03zd8rc/awg-admin
   GHCR_IMAGE: ghcr.io/vozdr/awg-admin
 
 jobs:
@@ -59,10 +58,6 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@v3
-        with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
@@ -72,9 +67,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: ${{ matrix.platform }}
-          outputs: |
-            type=image,name=${{ env.DOCKERHUB_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-            type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.GHCR_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           build-args: AWG_ADMIN_VERSION=${{ steps.version.outputs.value }}
           provenance: false
           cache-from: type=gha,scope=${{ matrix.arch }}
@@ -105,10 +98,6 @@ jobs:
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@v3
-        with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
@@ -116,14 +105,11 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          dockerhub_images=()
           ghcr_images=()
           for digest in /tmp/digests/*; do
             hash="$(basename "$digest")"
-            dockerhub_images+=("${DOCKERHUB_IMAGE}@sha256:${hash}")
             ghcr_images+=("${GHCR_IMAGE}@sha256:${hash}")
           done
-          docker buildx imagetools create --tag "${DOCKERHUB_IMAGE}:latest" "${dockerhub_images[@]}"
           docker buildx imagetools create --tag "${GHCR_IMAGE}:latest" "${ghcr_images[@]}"
       - name: Publish version tag
         if: startsWith(github.ref, 'refs/tags/v')
@@ -131,12 +117,9 @@ jobs:
           VERSION: ${{ github.ref_name }}
         shell: bash
         run: |
-          dockerhub_images=()
           ghcr_images=()
           for digest in /tmp/digests/*; do
             hash="$(basename "$digest")"
-            dockerhub_images+=("${DOCKERHUB_IMAGE}@sha256:${hash}")
             ghcr_images+=("${GHCR_IMAGE}@sha256:${hash}")
           done
-          docker buildx imagetools create --tag "${DOCKERHUB_IMAGE}:${VERSION#v}" "${dockerhub_images[@]}"
           docker buildx imagetools create --tag "${GHCR_IMAGE}:${VERSION#v}" "${ghcr_images[@]}"

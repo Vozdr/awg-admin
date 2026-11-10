@@ -1,6 +1,6 @@
 # AWG Admin troubleshooting
 
-[Home](../README_EN.md) · [Environment reference](ENVIRONMENT_EN.md) · [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin)
+[Home](../README_EN.md) · [Environment reference](ENVIRONMENT_EN.md) · [GitHub Container Registry](GHCR_EN.md)
 
 ## The panel container stops immediately
 

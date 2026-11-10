@@ -1,6 +1,6 @@
 # AWG Admin
 
-[Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) · [GitHub Container Registry](https://github.com/Vozdr/awg-admin/pkgs/container/awg-admin) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
+[GitHub Container Registry](docs/GHCR_EN.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
 AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 
@@ -41,8 +41,8 @@ In this example, MikroTik uses `172.17.0.1` and the container uses `172.17.0.2`:
 /container/envs/add list=awg-admin key=ADMIN_PASSWORD value="CHANGE_PANEL_PASSWORD"
 /container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/config/set registry-url=https://registry-1.docker.io
-/container/add remote-image=w03zd8rc/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/config/set registry-url=https://ghcr.io
+/container/add remote-image=vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Wait until the container is `stopped`, then start it:
@@ -63,4 +63,4 @@ For a second or later server, add its number to every server-specific variable, 
 
 The panel can reveal client private keys and modify MikroTik configuration. Restrict the MikroTik API service to the panel's veth address and do not expose the panel to the internet without HTTPS and an additional access restriction.
 
-Source: [GitHub](https://github.com/Vozdr/awg-admin). Images: [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin) and [GitHub Container Registry](https://github.com/Vozdr/awg-admin/pkgs/container/awg-admin).
+Source: [GitHub](https://github.com/Vozdr/awg-admin). Images: [GitHub Container Registry](https://github.com/Vozdr/awg-admin/pkgs/container/awg-admin).
