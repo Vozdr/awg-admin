@@ -1,6 +1,6 @@
 # Диагностика AWG Admin
 
-[Главная](../README.md) · [Переменные окружения](ENVIRONMENT_RU.md) · [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin)
+[Главная](../README.md) · [English](TROUBLESHOOTING_EN.md) · [Переменные окружения](ENVIRONMENT_RU.md) · [Docker Hub](https://hub.docker.com/r/w03zd8rc/awg-admin)
 
 ## Контейнер панели сразу останавливается
 

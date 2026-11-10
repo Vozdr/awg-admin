@@ -1,5 +1,7 @@
 # AWG Admin
 
+[English](https://github.com/Vozdr/awg-admin/blob/main/docs/DOCKERHUB_EN.md)
+
 Полная документация и исходный код: [github.com/Vozdr/awg-admin](https://github.com/Vozdr/awg-admin)
 
 Веб-панель управления клиентами одного или нескольких серверов AmneziaWG на MikroTik для контейнера [`amneziawg-mikrotik-c` от timbrs](https://github.com/timbrs/amneziawg-mikrotik-c). Данные хранятся только в MikroTik; локальной базы и конфигов нет.
