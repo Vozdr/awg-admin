@@ -100,6 +100,8 @@ class ServerSettings:
             raise SettingsError(f"{endpoint_name} port must be between 1 and 65535")
 
         ssl_enabled = env_bool("MIKROTIK_API_SSL", False, index)
+        container_name = _env_value("AWG_CONTAINER_NAME", index, "wg-awg-server-1").strip() or "wg-awg-server-1"
+        server_name = _env_value("AWG_SERVER_NAME", index).strip() or container_name
         return cls(
             id=str(index), index=index, mikrotik_host=host, mikrotik_username=username,
             mikrotik_password=password, mikrotik_api_ssl=ssl_enabled,
@@ -107,9 +109,9 @@ class ServerSettings:
             mikrotik_ssl_verify=env_bool("MIKROTIK_SSL_VERIFY", True, index),
             mikrotik_connect_timeout=env_int("MIKROTIK_CONNECT_TIMEOUT", 10, 1, 120, index),
             mikrotik_command_timeout=env_int("MIKROTIK_COMMAND_TIMEOUT", 20, 1, 300, index),
-            awg_container_name=_env_value("AWG_CONTAINER_NAME", index, "wg-awg-server-1").strip() or "wg-awg-server-1",
+            awg_container_name=container_name,
             awg_client_endpoint=endpoint,
-            awg_server_name=_env_value("AWG_SERVER_NAME", index, "AWG Server").strip() or "AWG Server",
+            awg_server_name=server_name,
             client_default_keepalive=env_int("CLIENT_DEFAULT_KEEPALIVE", 30, 0, 65535, index),
             client_default_dns=_env_value("CLIENT_DEFAULT_DNS", index, "1.1.1.1,8.8.8.8").strip(),
             client_default_allowed_ips=_env_value("CLIENT_DEFAULT_ALLOWED_IPS", index, "0.0.0.0/0,::/0").strip(),

@@ -231,11 +231,26 @@ def test_settings_defaults_and_validation(monkeypatch):
     assert settings.admin_username == "admin"
     assert settings.admin_password == "admin"
     assert settings.awg_container_name == "wg-awg-server-1"
+    assert settings.awg_server_name == "wg-awg-server-1"
     assert settings.client_default_dns == "1.1.1.1,8.8.8.8"
     assert settings.log_level == "ERROR"
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "invalid")
     with pytest.raises(SettingsError):
         Settings.from_env()
+
+
+def test_server_name_defaults_to_matching_container_name(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "192.0.2.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("AWG_CONTAINER_NAME", "home-awg")
+    monkeypatch.setenv("AWG_SERVER_NAME", "   ")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+
+    settings = Settings.from_env()
+
+    assert settings.awg_server_name == "home-awg"
 
 
 def test_settings_discovers_independent_suffixed_servers(monkeypatch):
@@ -258,6 +273,7 @@ def test_settings_discovers_independent_suffixed_servers(monkeypatch):
     assert [server.id for server in settings.servers] == ["1", "3"]
     assert settings.servers[1].mikrotik_api_port == 8729
     assert settings.servers[1].awg_container_name == "awg-three"
+    assert settings.servers[1].awg_server_name == "Branch office"
     assert settings.servers[1].display_name == "Branch office"
     assert settings.servers[1].client_default_dns == "9.9.9.9"
 
