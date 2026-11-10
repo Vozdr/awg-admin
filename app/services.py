@@ -27,11 +27,23 @@ from .settings import ServerSettings
 
 LOGGER = logging.getLogger("awgm-admin")
 
+INVALID_FILENAME_CHARS = re.compile(r"[^\w .()-]+", re.UNICODE)
+
 WG_MENU = "interface/wireguard"
 PEER_MENU = "interface/wireguard/peers"
 CONTAINER_MENU = "container"
 ENV_MENU = "container/envs"
 ADDRESS_MENU = "ip/address"
+
+
+def configuration_filename(server_name: str, client_name: str) -> str:
+    def safe_part(value: str, fallback: str) -> str:
+        cleaned = INVALID_FILENAME_CHARS.sub("_", str(value or ""))
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ._")
+        return (cleaned[:80].rstrip(" ._") or fallback)
+
+    return f"{safe_part(server_name, 'server')}+{safe_part(client_name, 'client')}.conf"
+
 
 BASE_REQUIRED_AWG_ENV = {
     "AWG_MODE",

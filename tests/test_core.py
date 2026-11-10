@@ -19,6 +19,7 @@ from app.services import (
     build_awg_config,
     clean_comment_metadata,
     comment_with_disabled_at,
+    configuration_filename,
     generate_wireguard_key_pair,
     make_vpn_uri,
     parse_conf,
@@ -38,7 +39,6 @@ class FakeRouterOS:
             "AWG_SERVER_PUB": "server-public", "AWG_CLIENT_PUB": "legacy-fallback", "AWG_CLIENT_PUBS": "client-public",
             "AWG_HEADER_PROTECTION_KEY": "visible-header-protection-key",
         }
-
     def print(self, menu, proplist=None):
         if menu == "system/resource":
             return [{"version": "7.22", "board-name": "CHR", "architecture-name": "x86_64"}]
@@ -56,6 +56,12 @@ class FakeRouterOS:
         if menu == "interface/wireguard/peers":
             return [{".id": "*4", "name": "Alice", "comment": "Phone", "interface": "wg-awg", "disabled": "false", "public-key": "client-public", "allowed-address": "192.168.177.2/32", "client-address": "192.168.177.2/24", "rx": "1024", "tx": "2048"}]
         raise AssertionError(menu)
+
+
+def test_configuration_filename_uses_server_and_client_names():
+    assert configuration_filename("AWG Home", "peer-phone") == "AWG Home+peer-phone.conf"
+    assert configuration_filename('Домашний/AWG:*?', 'Телефон+Иван/1') == "Домашний_AWG+Телефон_Иван_1.conf"
+    assert configuration_filename("***", "///") == "server+client.conf"
 
 
 class MutableRouterOS(FakeRouterOS):

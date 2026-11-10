@@ -8,10 +8,11 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 
@@ -27,6 +28,7 @@ from .models import (
     SyncRequest,
 )
 from .registry import ServerRegistry, ServerRuntime
+from .services import configuration_filename
 from .settings import Settings, SettingsError
 
 
@@ -54,8 +56,9 @@ locales = Locales(settings)
 
 def selected_runtime(
     x_awg_server: str | None = Header(default=None, alias="X-AWG-Server"),
+    awg_server: str | None = Query(default=None),
 ) -> ServerRuntime:
-    return registry.get(x_awg_server)
+    return registry.get(x_awg_server or awg_server)
 
 
 def render_template(name: str, replacements: dict[str, str] | None = None) -> str:
@@ -283,6 +286,25 @@ async def update_server_settings(
 @app.get("/api/clients/{peer_id}/config")
 async def client_config(peer_id: str, _: str = Depends(auth.require_auth), runtime: ServerRuntime = Depends(selected_runtime)) -> dict[str, Any]:
     return await run_in_threadpool(runtime.service.client_config, peer_id)
+
+
+@app.get("/api/clients/{peer_id}/config/download")
+async def download_client_config(
+    peer_id: str,
+    _: str = Depends(auth.require_auth),
+    runtime: ServerRuntime = Depends(selected_runtime),
+) -> Response:
+    data = await run_in_threadpool(runtime.service.client_config, peer_id)
+    filename = configuration_filename(runtime.settings.awg_server_name, data["name"])
+    disposition = f"attachment; filename=\"awg-config.conf\"; filename*=UTF-8''{quote(filename, safe='')}"
+    return Response(
+        content=data["config"].encode("utf-8"),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": disposition,
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.get("/api/clients/{peer_id}")
