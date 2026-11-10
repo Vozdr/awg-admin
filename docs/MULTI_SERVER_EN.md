@@ -15,7 +15,7 @@ The first server uses regular, unsuffixed variables. The second uses `_2`, the t
 - `MIKROTIK_PASSWORD_N`;
 - `AWG_CLIENT_ENDPOINT_N`.
 
-If any required setting for a declared server is missing, AWG Admin stops and reports the missing variable by name.
+This is a structural env validation performed before connecting to MikroTik. If any declared server has one of the four required variables missing or empty, the entire panel configuration is considered incomplete: AWG Admin does not start and reports the variable by name. Such a server cannot remain in the selector with a warning because there is not enough information to create its connection.
 
 ## Second server example
 
@@ -39,4 +39,6 @@ Authentication and UI belong to the panel itself, so these variables are never d
 
 ## Per-server failures
 
-The panel checks every configured server at startup. A connection or configuration error on one additional server does not block healthy servers: the failed server remains in the selector with a warning and its error is shown when selected. AWG Admin stops only when none of the configured servers is usable. As before, insufficient API permissions keep the diagnostic UI available.
+After the required env values pass validation, the panel connects to every described server and checks its MikroTik resources. An unreachable MikroTik router, an API error, or a problem with one server's AWG container does not block healthy servers: the failed server remains in the selector with a warning and the resulting error is shown when selected.
+
+AWG Admin does not start if any declared server has incomplete required env values, or if no usable server remains after the runtime checks. Insufficient API permissions are the exception: as before, this error keeps the diagnostic UI available.
