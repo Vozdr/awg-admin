@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="__DEFAULT_LANG__" data-theme="__DEFAULT_THEME__">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AWG Admin</title><link rel="stylesheet" href="/static/app.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AWGM Admin</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
   <header class="topbar"><div class="topbar-inner">
-    <div class="brand"><span class="brand-mark small">A</span><div><strong>AWG Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverState">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings">⚙</button></div></div></div>
+    <div class="brand"><span class="brand-mark small">M</span><div><strong>AWGM Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverState">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings">⚙</button></div></div></div>
     <div class="top-actions"><span class="connection-status" id="connectionStatus"><i></i><span data-i18n="status.loading">Loading</span></span><select id="languageSelect" aria-label="Language"></select><button class="icon-button" id="themeToggle" aria-label="Theme">◐</button><a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a></div>
   </div></header>
 
@@ -26,7 +26,7 @@
     </section>
 
     <div class="table-toolbar"><button class="button primary add-button" id="addClientButton"><span>＋</span><span data-i18n="clients.add">Add client</span></button><div class="refresh-controls"><label><span data-i18n="common.autoRefresh">Auto</span><select id="autoRefresh"><option value="0" data-i18n="common.off">Off</option><option value="5000">5 s</option><option value="15000">15 s</option><option value="30000">30 s</option><option value="60000">60 s</option></select></label><button class="icon-button" id="refreshButton" data-i18n-title="common.refresh" title="Refresh">↻</button><small id="updatedAt"></small></div></div>
-    <footer class="app-footer">Powered by: <a href="https://github.com/Vozdr/awg-admin" target="_blank" rel="noopener noreferrer">AWG Admin v__APP_VERSION__</a></footer>
+    <footer class="app-footer">Powered by: <a href="https://github.com/Vozdr/awgm-admin" target="_blank" rel="noopener noreferrer">AWGM Admin v__APP_VERSION__</a></footer>
   </main>
 
   <dialog id="clientDialog" class="modal client-modal"><form id="clientForm" method="dialog"><header><div><h2 id="clientDialogTitle"></h2><p data-i18n="clientForm.subtitle">Client parameters stored in the MikroTik peer.</p></div><button type="button" class="close-button" data-close>×</button></header>

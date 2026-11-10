@@ -22,7 +22,7 @@ permissions:
   packages: write
 
 env:
-  GHCR_IMAGE: ghcr.io/vozdr/awg-admin
+  GHCR_IMAGE: ghcr.io/vozdr/awgm-admin
 
 jobs:
   test:

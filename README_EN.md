@@ -1,10 +1,12 @@
-# AWG Admin
+# AWGM Admin
 
 [Русский](README.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
-AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
+AWGM Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 
 The panel has no database or local configuration files. Clients, comments, addresses, keys, and statistics are read directly from MikroTik. Public peer keys are synchronized with the proxy container's `AWG_CLIENT_PUBS` variable.
+
+The project was previously named AWG Admin. Existing installations do not need to rename environment variables, environment lists, veth interfaces, API users, or containers; only the published image address has changed.
 
 Features:
 
@@ -20,34 +22,34 @@ Features:
 
 RouterOS v7 with the Container package, a configured server-mode `awg-proxy`, and the `api` or `api-ssl` service are required. The AWG container may be stopped without preventing the panel from running.
 
-Create a dedicated group and user. AWG Admin needs only `read`, `write`, `sensitive`, and `api`:
+Create a dedicated group and user. AWGM Admin needs only `read`, `write`, `sensitive`, and `api`:
 
 ```routeros
-/user/group/add name=awg-admin policy=read,write,sensitive,api
-/user/add name=awg-admin group=awg-admin password="CHANGE_ME" address=172.17.0.2/32
+/user/group/add name=awgm-admin policy=read,write,sensitive,api
+/user/add name=awgm-admin group=awgm-admin password="CHANGE_ME" address=172.17.0.2/32
 ```
 
 In this example, MikroTik uses `172.17.0.1` and the container uses `172.17.0.2`:
 
 ```routeros
-/interface/veth/add name=veth-awg-admin address=172.17.0.2/24 gateway=172.17.0.1
-/ip/address/add address=172.17.0.1/24 interface=veth-awg-admin
+/interface/veth/add name=veth-awgm-admin address=172.17.0.2/24 gateway=172.17.0.1
+/ip/address/add address=172.17.0.1/24 interface=veth-awgm-admin
 
-/container/envs/add list=awg-admin key=MIKROTIK_HOST value=172.17.0.1
-/container/envs/add list=awg-admin key=MIKROTIK_USERNAME value=awg-admin
-/container/envs/add list=awg-admin key=MIKROTIK_PASSWORD value="CHANGE_ME"
-/container/envs/add list=awg-admin key=AWG_CLIENT_ENDPOINT value=vpn.example.org:51820
-/container/envs/add list=awg-admin key=ADMIN_USERNAME value=admin
-/container/envs/add list=awg-admin key=ADMIN_PASSWORD value="CHANGE_PANEL_PASSWORD"
-/container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
+/container/envs/add list=awgm-admin key=MIKROTIK_HOST value=172.17.0.1
+/container/envs/add list=awgm-admin key=MIKROTIK_USERNAME value=awgm-admin
+/container/envs/add list=awgm-admin key=MIKROTIK_PASSWORD value="CHANGE_ME"
+/container/envs/add list=awgm-admin key=AWG_CLIENT_ENDPOINT value=vpn.example.org:51820
+/container/envs/add list=awgm-admin key=ADMIN_USERNAME value=admin
+/container/envs/add list=awgm-admin key=ADMIN_PASSWORD value="CHANGE_PANEL_PASSWORD"
+/container/envs/add list=awgm-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/add remote-image=ghcr.io/vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/add remote-image=ghcr.io/vozdr/awgm-admin:latest interface=veth-awgm-admin envlists=awgm-admin name=awgm-admin logging=yes start-on-boot=yes
 ```
 
 Wait until the container is `stopped`, then start it:
 
 ```routeros
-/container/start [find where name="awg-admin"]
+/container/start [find where name="awgm-admin"]
 ```
 
 The panel listens on TCP port `8080` at the container address. `AWG_CLIENT_ENDPOINT` is used only to generate client configurations and is never probed.
@@ -62,4 +64,4 @@ For a second or later server, add its number to every server-specific variable, 
 
 The panel can reveal client private keys and modify MikroTik configuration. Restrict the MikroTik API service to the panel's veth address and do not expose the panel to the internet without HTTPS and an additional access restriction.
 
-Source: [GitHub](https://github.com/Vozdr/awg-admin). Images: [GitHub Container Registry](https://github.com/Vozdr/awg-admin/pkgs/container/awg-admin).
+Source: [GitHub](https://github.com/Vozdr/awgm-admin). Images: [GitHub Container Registry](https://github.com/Vozdr/awgm-admin/pkgs/container/awgm-admin).

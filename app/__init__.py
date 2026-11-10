@@ -1,2 +1,2 @@
-"""AWG Admin application package."""
+"""AWGM Admin application package."""
 

@@ -1,15 +1,15 @@
-# AWG Admin environment variables
+# AWGM Admin environment variables
 
 [Home](../README_EN.md) · [Русский](ENVIRONMENT_RU.md) · [Multiple servers](MULTI_SERVER_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
 
-AWG Admin does not read local configuration files and has no database. All application settings come from environment variables, while operational data comes from MikroTik.
+AWGM Admin does not read local configuration files and has no database. All application settings come from environment variables, while operational data comes from MikroTik.
 
 ## Required
 
 | Variable | Description | Example |
 |---|---|---|
 | `MIKROTIK_HOST` | MikroTik IP address or DNS name, without a scheme or port. | `172.17.0.1` |
-| `MIKROTIK_USERNAME` | RouterOS API user. | `awg-admin` |
+| `MIKROTIK_USERNAME` | RouterOS API user. | `awgm-admin` |
 | `MIKROTIK_PASSWORD` | RouterOS API user password. | `strong-password` |
 | `AWG_CLIENT_ENDPOINT` | Endpoint written to client configurations. It is not probed. | `vpn.example.org:51820` |
 | `SESSION_SECRET` | Session and CSRF signing secret. Required unless authentication is disabled. Generated once during container setup. | `[:rndstr length=64]` in a RouterOS command |

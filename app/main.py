@@ -38,7 +38,7 @@ logging.basicConfig(
     level=getattr(logging, settings.log_level, logging.INFO),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
-LOGGER = logging.getLogger("awg-admin")
+LOGGER = logging.getLogger("awgm-admin")
 
 registry = ServerRegistry(settings)
 auth = AuthManager(settings)
@@ -60,8 +60,8 @@ def render_template(name: str, replacements: dict[str, str] | None = None) -> st
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    print(f"AWG Admin {settings.app_version} starting", flush=True)
-    print("https://github.com/Vozdr/awg-admin", flush=True)
+    print(f"AWGM Admin {settings.app_version} starting", flush=True)
+    print("https://github.com/Vozdr/awgm-admin", flush=True)
     for key, value in settings.safe_startup_values():
         print(f"AWG_ADMIN: {key}={value}", flush=True)
     if settings.auth_disable:
@@ -82,7 +82,7 @@ async def lifespan(_: FastAPI):
     registry.close()
 
 
-app = FastAPI(title="AWG Admin", version=settings.app_version, lifespan=lifespan)
+app = FastAPI(title="AWGM Admin", version=settings.app_version, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 

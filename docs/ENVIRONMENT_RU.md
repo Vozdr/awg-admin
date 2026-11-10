@@ -1,15 +1,15 @@
-# Переменные окружения AWG Admin
+# Переменные окружения AWGM Admin
 
 [Главная](../README.md) · [English](ENVIRONMENT_EN.md) · [Несколько серверов](MULTI_SERVER_RU.md) · [Диагностика](TROUBLESHOOTING_RU.md)
 
-AWG Admin не читает локальные конфиги и не использует базу данных. Все параметры приложения задаются через env, а рабочие данные берутся из MikroTik.
+AWGM Admin не читает локальные конфиги и не использует базу данных. Все параметры приложения задаются через env, а рабочие данные берутся из MikroTik.
 
 ## Обязательные параметры
 
 | Переменная | Описание | Пример |
 |---|---|---|
 | `MIKROTIK_HOST` | IP или DNS-имя MikroTik. Без схемы и порта. | `172.17.0.1` |
-| `MIKROTIK_USERNAME` | Пользователь RouterOS API. | `awg-admin` |
+| `MIKROTIK_USERNAME` | Пользователь RouterOS API. | `awgm-admin` |
 | `MIKROTIK_PASSWORD` | Пароль пользователя RouterOS API. | `strong-password` |
 | `AWG_CLIENT_ENDPOINT` | Endpoint, который попадёт в клиентские конфиги. Доступность не проверяется. | `vpn.example.org:51820` |
 | `SESSION_SECRET` | Секрет подписи сессий и CSRF. Обязателен, если авторизация не отключена. Создаётся один раз при настройке контейнера. | `[:rndstr length=64]` в команде RouterOS |

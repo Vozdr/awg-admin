@@ -139,6 +139,9 @@ def test_first_free_address_skips_used_without_scanning_whole_network():
 def test_comment_metadata_roundtrip():
     value = comment_with_disabled_at("Office laptop", "2026-11-09T10:30:00+00:00")
     assert clean_comment_metadata(value) == ("Office laptop", "2026-11-09T10:30:00+00:00")
+    assert "[awgm-admin:v1;" in value
+    legacy = "Office laptop [awg-admin:v1;disabled_at=2026-11-09T10:30:00+00:00]"
+    assert clean_comment_metadata(legacy) == ("Office laptop", "2026-11-09T10:30:00+00:00")
     assert comment_with_disabled_at(value, None) == "Office laptop"
 
 

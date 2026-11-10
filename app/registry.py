@@ -10,7 +10,7 @@ from .services import AwgAdminService
 from .settings import ServerSettings, Settings
 
 
-LOGGER = logging.getLogger("awg-admin")
+LOGGER = logging.getLogger("awgm-admin")
 
 
 @dataclass

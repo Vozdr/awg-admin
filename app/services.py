@@ -24,7 +24,7 @@ from .routeros import RouterOSClient
 from .settings import ServerSettings
 
 
-LOGGER = logging.getLogger("awg-admin")
+LOGGER = logging.getLogger("awgm-admin")
 
 WG_MENU = "interface/wireguard"
 PEER_MENU = "interface/wireguard/peers"
@@ -115,7 +115,7 @@ AWG_ENV_DESCRIPTION_KEYS = {
     "AWG_SPIN": "serverSettings.env.spin",
 }
 
-METADATA_RE = re.compile(r"\s*\[awg-admin:v1(?:;disabled_at=([^\]]+))?\]\s*$")
+METADATA_RE = re.compile(r"\s*\[(?:awgm-admin|awg-admin):v1(?:;disabled_at=([^\]]+))?\]\s*$")
 MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
 
 
@@ -149,7 +149,7 @@ def comment_with_disabled_at(comment: str, disabled_at: str | None) -> str:
     clean, _ = clean_comment_metadata(comment)
     if not disabled_at:
         return clean
-    suffix = f"[awg-admin:v1;disabled_at={disabled_at}]"
+    suffix = f"[awgm-admin:v1;disabled_at={disabled_at}]"
     return f"{clean} {suffix}".strip()
 
 
