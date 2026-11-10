@@ -3,7 +3,7 @@
 const boot = window.AWG_BOOT || {};
 const state = {
   dict:{}, lang:localStorage.getItem("awg-lang") || boot.lang || "ru", theme:localStorage.getItem("awg-theme") || boot.theme || "dark",
-  csrf:"", servers:[], serverId:localStorage.getItem("awg-server-id") || "", dashboard:null, currentClient:null, currentConfig:null, filter:"all", busy:false, updatedAt:null, refreshTimer:null,
+  csrf:"", servers:[], serverId:localStorage.getItem("awg-server-id") || "", dashboard:null, dashboardState:"loading", currentClient:null, currentConfig:null, filter:"all", busy:false, updatedAt:null, refreshTimer:null,
   sort:{field:localStorage.getItem("awg-sort-field") || "name", direction:localStorage.getItem("awg-sort-direction") || "asc"},
   defaults:{keepalive:30,dns:"",allowed_ips:"0.0.0.0/0,::/0"}
 };
@@ -34,7 +34,7 @@ function applyTranslations() {
   $$('[data-i18n]').forEach(el => el.textContent=t(el.dataset.i18n));
   $$('[data-i18n-placeholder]').forEach(el => el.placeholder=t(el.dataset.i18nPlaceholder));
   $$('[data-i18n-title]').forEach(el => el.title=t(el.dataset.i18nTitle));
-  if (!boot.login && state.dashboard) renderDashboard();
+  if (!boot.login) { if (state.dashboard) renderDashboard(); else renderClients(); }
 }
 async function loadLocales() { const list=await fetch("/api/i18n").then(r=>r.json()); const select=$("#languageSelect"); select.innerHTML=list.locales.map(item=>`<option value="${escapeHtml(item.code)}">${escapeHtml(item.native_name)}</option>`).join(""); if (!list.locales.some(item=>item.code===state.lang)) state.lang=list.default; select.value=state.lang; state.dict=await fetch(`/api/i18n/${encodeURIComponent(state.lang)}`).then(r=>r.json()); applyTranslations(); }
 async function changeLanguage(value) { state.lang=value; localStorage.setItem("awg-lang",value); document.cookie=`awg_admin_lang=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=strict`; state.dict=await fetch(`/api/i18n/${encodeURIComponent(value)}`).then(r=>r.json()); applyTranslations(); }
@@ -46,7 +46,8 @@ function showError(error, inline=false) { const key=error?.message_key||"error.u
 function setServiceStatus(selector, status) { const el=$(selector); el.classList.remove("loading","online","offline"); el.classList.add(status); }
 function setConnection(mikrotik="loading", container="loading") { setServiceStatus("#mikrotikStatus",mikrotik); setServiceStatus("#containerStatus",container); }
 
-function setBusy(busy, button=null) { state.busy=busy; $$('button,select,input').forEach(el => { if (busy) { el.dataset.disabledBeforeBusy=el.disabled?"1":"0"; el.disabled=true; } else { el.disabled=el.dataset.disabledBeforeBusy==="1"; delete el.dataset.disabledBeforeBusy; } }); if (button) button.classList.toggle("busy",busy); document.body.classList.toggle("app-busy",busy); }
+function applyDataActionState() { const disabled=state.dashboardState!=="ready", unavailable=state.dashboardState==="unavailable"; $$("#serverSettingsButton,#addClientButton,.summary-card,#clientSearch,#clearSearchButton").forEach(el=>{el.disabled=disabled;el.classList.toggle("data-unavailable",unavailable);}); }
+function setBusy(busy, button=null) { state.busy=busy; $$('button,select,input').forEach(el => { if (busy) { el.dataset.disabledBeforeBusy=el.disabled?"1":"0"; el.disabled=true; } else { el.disabled=el.dataset.disabledBeforeBusy==="1"; delete el.dataset.disabledBeforeBusy; } }); if (!busy) applyDataActionState(); if (button) button.classList.toggle("busy",busy); document.body.classList.toggle("app-busy",busy); }
 async function withBusy(button, operation) { if (state.busy) return; setBusy(true,button); try { return await operation(); } finally { setBusy(false,button); } }
 function openModal(dialog) { $$('dialog[open]').forEach(open => { if (open!==dialog) open.close(); }); if (!dialog.open) dialog.showModal(); }
 
@@ -63,7 +64,8 @@ function renderServerSelect() {
 }
 function setSelectedServerAvailability(available, containerStatus=null) { const server=state.servers.find(item=>item.id===state.serverId); if (server) { server.available=available; if (containerStatus) server.container_status=containerStatus; } renderServerSelect(); }
 async function loadServers() { const data=await api("/api/servers"); state.servers=data.servers||[]; if (!state.servers.some(item=>item.id===state.serverId)) state.serverId=data.default || state.servers[0]?.id || ""; localStorage.setItem("awg-server-id",state.serverId); renderServerSelect(); }
-function clearDashboard() { state.dashboard=null; state.currentClient=null; state.currentConfig=null; state.updatedAt=null; $("#totalClients").textContent="—"; $("#activeClients").textContent="—"; $("#disabledClients").textContent="—"; $("#clientsBody").innerHTML=""; $("#emptyState").classList.add("hidden"); $("#syncWarning").classList.add("hidden"); setConnection(); renderUpdatedAt(); }
+function setDashboardState(value) { state.dashboardState=value; applyDataActionState(); renderClients(); }
+function clearDashboard() { state.dashboard=null; state.currentClient=null; state.currentConfig=null; state.updatedAt=null; $("#totalClients").textContent="—"; $("#activeClients").textContent="—"; $("#disabledClients").textContent="—"; $("#emptyState").classList.add("hidden"); $("#syncWarning").classList.add("hidden"); setConnection(); setDashboardState("loading"); renderUpdatedAt(); }
 async function changeServer(serverId) { state.serverId=serverId; localStorage.setItem("awg-server-id",serverId); clearDashboard(); $("#runtimeError").classList.add("hidden"); await loadDashboard(); }
 
 function renderDashboard() {
@@ -76,6 +78,7 @@ function renderDashboard() {
 }
 function sortValue(client, field) { if (field==="disabled") return client.disabled?1:0; if (field==="rx") return Number(client.rx||0)+Number(client.tx||0); if (field==="last_handshake") return handshakeSeconds(client.last_handshake); return String(client[field]||"").toLocaleLowerCase(state.lang); }
 function renderClients() {
+  if (state.dashboardState!=="ready") { const loading=state.dashboardState==="loading"; $("#clientsBody").innerHTML=`<tr class="table-message-row"><td colspan="6"><span class="table-message ${loading?"loading":""}">${escapeHtml(t(loading?"clients.loading":"clients.unavailable"))}</span></td></tr>`; $("#emptyState").classList.add("hidden"); return; }
   const all=state.dashboard?.clients||[], query=$("#clientSearch").value.trim(), normalizedQuery=query.toLocaleLowerCase(state.lang);
   $("#clearSearchButton").classList.toggle("hidden",!$("#clientSearch").value);
   let clients=all.filter(item => state.filter==="all" || (state.filter==="disabled" ? item.disabled : !item.disabled));
@@ -88,7 +91,7 @@ function renderClients() {
 }
 function fillPools() { const pools=state.dashboard?.pools||[]; $("#poolSelect").innerHTML=pools.map(pool=>`<option value="${escapeHtml(pool.cidr)}" ${pool.available?"":"disabled"}>${escapeHtml(pool.cidr)} — ${pool.available?t("clientForm.nextAddress",{address:pool.free_address}):t("clientForm.poolFull")}</option>`).join(""); }
 function renderUpdatedAt() { $("#updatedAt").textContent=state.updatedAt?t("common.updatedAt",{date:localeDate(state.updatedAt,{dateStyle:"short",timeStyle:"medium"})}):""; }
-async function loadDashboard() { try { state.dashboard=await api("/api/dashboard"); state.updatedAt=new Date(); $("#runtimeError").classList.add("hidden"); renderDashboard(); return true; } catch(error) { const mikrotikFailed=error?.code==="NETWORK_ERROR"||String(error?.code||"").startsWith("MIKROTIK_"); setSelectedServerAvailability(false,mikrotikFailed?"stopped":null); const selected=state.servers.find(item=>item.id===state.serverId); setConnection(mikrotikFailed?"offline":"online",!mikrotikFailed&&selected?.container_status==="running"?"online":"offline"); showError(error,true); return false; } }
+async function loadDashboard() { if (!state.dashboard) setDashboardState("loading"); try { state.dashboard=await api("/api/dashboard"); state.dashboardState="ready"; state.updatedAt=new Date(); $("#runtimeError").classList.add("hidden"); applyDataActionState(); renderDashboard(); return true; } catch(error) { state.dashboard=null; state.dashboardState="unavailable"; applyDataActionState(); renderClients(); const mikrotikFailed=error?.code==="NETWORK_ERROR"||String(error?.code||"").startsWith("MIKROTIK_"); setSelectedServerAvailability(false,mikrotikFailed?"stopped":null); const selected=state.servers.find(item=>item.id===state.serverId); setConnection(mikrotikFailed?"offline":"online",!mikrotikFailed&&selected?.container_status==="running"?"online":"offline"); showError(error,true); return false; } }
 
 function setAddressModeOptions(editing) { const select=$("#addressMode"); select.innerHTML=(editing?["keep","next","manual"]:["next","manual"]).map(value=>`<option value="${value}">${t(`clientForm.addressMode.${value}`)}</option>`).join(""); updateAddressFields(); }
 function updateAddressFields() { const mode=$("#addressMode").value; $("#poolField").classList.toggle("hidden",mode==="keep"); $("#manualAddressField").classList.toggle("hidden",mode!=="manual"); }
@@ -132,7 +135,7 @@ async function startApp() {
   await loadLocales(); bindCommon(); if (boot.login) return; try { const session=await api("/api/session"); state.csrf=session.csrf; $("#authWarning").classList.toggle("hidden",!session.auth_disabled); $("#logoutButton").classList.toggle("hidden",session.auth_disabled); await loadServers(); } catch(error) { setConnection("offline","offline"); showError(error,true); return; }
   $("#serverSelect").addEventListener("change",event=>changeServer(event.target.value).catch(error=>showError(error,true)));
   $("#refreshButton").addEventListener("click",event=>withBusy(event.currentTarget,loadDashboard)); $("#retryButton").addEventListener("click",loadDashboard); $("#clientSearch").addEventListener("input",renderClients); $("#clearSearchButton").addEventListener("click",()=>{ $("#clientSearch").value=""; $("#clientSearch").focus(); renderClients(); });
-  $$('.summary-card').forEach(card=>card.addEventListener("click",()=>{state.filter=card.dataset.filter;renderClients();})); $$('.sortable').forEach(th=>th.addEventListener("click",()=>{ if (state.sort.field===th.dataset.sort) state.sort.direction=state.sort.direction==="asc"?"desc":"asc"; else {state.sort.field=th.dataset.sort;state.sort.direction="asc";} localStorage.setItem("awg-sort-field",state.sort.field);localStorage.setItem("awg-sort-direction",state.sort.direction);renderClients();}));
+  $$('.summary-card').forEach(card=>card.addEventListener("click",()=>{if(state.dashboardState!=="ready")return;state.filter=card.dataset.filter;renderClients();})); $$('.sortable').forEach(th=>th.addEventListener("click",()=>{ if(state.dashboardState!=="ready")return; if (state.sort.field===th.dataset.sort) state.sort.direction=state.sort.direction==="asc"?"desc":"asc"; else {state.sort.field=th.dataset.sort;state.sort.direction="asc";} localStorage.setItem("awg-sort-field",state.sort.field);localStorage.setItem("awg-sort-direction",state.sort.direction);renderClients();}));
   $("#addClientButton").addEventListener("click",event=>withBusy(event.currentTarget,()=>openClientDialog())); $("#clientForm").addEventListener("submit",saveClient); $("#addressMode").addEventListener("change",updateAddressFields); $("#clientForm").elements.store_private_key.addEventListener("change",updateKeyFields); $("#clientForm").elements.use_preshared_key.addEventListener("change",updateKeyFields); $("#generateKeyPair").addEventListener("click",event=>withBusy(event.currentTarget,()=>generateKeys("pair"))); $("#generatePsk").addEventListener("click",event=>withBusy(event.currentTarget,()=>generateKeys("psk")));
   $("#serverSettingsButton").addEventListener("click",event=>withBusy(event.currentTarget,openServerSettings)); $("#syncButton").addEventListener("click",event=>synchronize(event.currentTarget).catch(showError));
   $("#clientsBody").addEventListener("click",event=>{ const button=event.target.closest("button"),action=button?.dataset.action,id=event.target.closest("tr")?.dataset.id,client=state.dashboard?.clients.find(item=>item.id===id); if (!client||!action) return; if (action==="toggle") toggleClient(client,button).catch(showError); else if (action==="delete") deleteClient(client,button).catch(showError); else withBusy(button,()=>({config:showClientConfig,edit:openClientDialog}[action](client))).catch(showError); });

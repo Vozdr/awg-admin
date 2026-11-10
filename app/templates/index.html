@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AWGM Admin</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
   <header class="topbar"><div class="topbar-inner">
-    <div class="brand"><span class="brand-mark small">M</span><div><strong>AWGM Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverName" class="hidden">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings">⚙</button></div></div></div>
+    <div class="brand"><span class="brand-mark small">M</span><div><strong>AWGM Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverName" class="hidden">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings" disabled>⚙</button></div></div></div>
     <div class="top-actions"><div class="connection-stack"><span class="connection-status loading" id="mikrotikStatus"><i></i><span>MikroTik</span></span><span class="connection-status loading" id="containerStatus"><i></i><span>AWG Container</span></span></div><select id="languageSelect" aria-label="Language"></select><button class="icon-button" id="themeToggle" aria-label="Theme">◐</button><a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a></div>
   </div></header>
 
@@ -25,7 +25,7 @@
       </tr></thead><tbody id="clientsBody"></tbody></table><div class="empty-state hidden" id="emptyState"><div>⌁</div><strong id="emptyTitle"></strong><span id="emptyHint"></span></div></div>
     </section>
 
-    <div class="table-toolbar"><button class="button primary add-button" id="addClientButton"><span>＋</span><span data-i18n="clients.add">Add client</span></button><div class="refresh-controls"><label><span data-i18n="common.autoRefresh">Auto</span><select id="autoRefresh"><option value="0" data-i18n="common.off">Off</option><option value="5000">5 s</option><option value="15000">15 s</option><option value="30000">30 s</option><option value="60000">60 s</option></select></label><button class="icon-button" id="refreshButton" data-i18n-title="common.refresh" title="Refresh">↻</button><small id="updatedAt"></small></div></div>
+    <div class="table-toolbar"><button class="button primary add-button" id="addClientButton" disabled><span>＋</span><span data-i18n="clients.add">Add client</span></button><div class="refresh-controls"><label><span data-i18n="common.autoRefresh">Auto</span><select id="autoRefresh"><option value="0" data-i18n="common.off">Off</option><option value="5000">5 s</option><option value="15000">15 s</option><option value="30000">30 s</option><option value="60000">60 s</option></select></label><button class="icon-button" id="refreshButton" data-i18n-title="common.refresh" title="Refresh">↻</button><small id="updatedAt"></small></div></div>
     <footer class="app-footer">Powered by: <a href="https://github.com/Vozdr/awgm-admin" target="_blank" rel="noopener noreferrer">AWGM Admin v__APP_VERSION__</a></footer>
   </main>
 
