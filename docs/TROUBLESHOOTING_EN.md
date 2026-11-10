@@ -1,6 +1,6 @@
 # AWG Admin troubleshooting
 
-[Home](../README_EN.md) · [Русский](TROUBLESHOOTING_RU.md) · [Environment reference](ENVIRONMENT_EN.md) · [GitHub Container Registry](GHCR_EN.md)
+[Home](../README_EN.md) · [Русский](TROUBLESHOOTING_RU.md) · [Environment reference](ENVIRONMENT_EN.md)
 
 ## The panel container stops immediately
 

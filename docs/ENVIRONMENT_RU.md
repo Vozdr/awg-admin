@@ -1,6 +1,6 @@
 # Переменные окружения AWG Admin
 
-[Главная](../README.md) · [English](ENVIRONMENT_EN.md) · [GitHub Container Registry](GHCR_RU.md) · [Несколько серверов](MULTI_SERVER_RU.md) · [Диагностика](TROUBLESHOOTING_RU.md)
+[Главная](../README.md) · [English](ENVIRONMENT_EN.md) · [Несколько серверов](MULTI_SERVER_RU.md) · [Диагностика](TROUBLESHOOTING_RU.md)
 
 AWG Admin не читает локальные конфиги и не использует базу данных. Все параметры приложения задаются через env, а рабочие данные берутся из MikroTik.
 

@@ -1,6 +1,6 @@
 # Диагностика AWG Admin
 
-[Главная](../README.md) · [English](TROUBLESHOOTING_EN.md) · [Переменные окружения](ENVIRONMENT_RU.md) · [GitHub Container Registry](GHCR_RU.md)
+[Главная](../README.md) · [English](TROUBLESHOOTING_EN.md) · [Переменные окружения](ENVIRONMENT_RU.md)
 
 ## Контейнер панели сразу останавливается
 

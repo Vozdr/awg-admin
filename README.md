@@ -1,6 +1,6 @@
 # AWG Admin
 
-[GitHub Container Registry](docs/GHCR_RU.md) · [English](README_EN.md) · [Все переменные окружения](docs/ENVIRONMENT_RU.md) · [Несколько серверов](docs/MULTI_SERVER_RU.md) · [Диагностика](docs/TROUBLESHOOTING_RU.md)
+[English](README_EN.md) · [Все переменные окружения](docs/ENVIRONMENT_RU.md) · [Несколько серверов](docs/MULTI_SERVER_RU.md) · [Диагностика](docs/TROUBLESHOOTING_RU.md)
 
 AWG Admin — веб-панель управления клиентами AmneziaWG для MikroTik. Она рассчитана на серверный контейнер [`amneziawg-mikrotik-c` от timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) и работает с RouterOS напрямую через API или API-SSL.
 
@@ -41,8 +41,7 @@ AWG Admin — веб-панель управления клиентами Amnezi
 /container/envs/add list=awg-admin key=ADMIN_PASSWORD value="ЗАМЕНИТЕ_ПАРОЛЬ_ПАНЕЛИ"
 /container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/config/set registry-url=https://ghcr.io
-/container/add remote-image=vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/add remote-image=ghcr.io/vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Дождитесь состояния `stopped`, затем запустите контейнер:

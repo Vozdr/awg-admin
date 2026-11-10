@@ -1,6 +1,6 @@
 # AWG Admin
 
-[Русский](README.md) · [GitHub Container Registry](docs/GHCR_EN.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
+[Русский](README.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
 AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 
@@ -41,8 +41,7 @@ In this example, MikroTik uses `172.17.0.1` and the container uses `172.17.0.2`:
 /container/envs/add list=awg-admin key=ADMIN_PASSWORD value="CHANGE_PANEL_PASSWORD"
 /container/envs/add list=awg-admin key=SESSION_SECRET value=[:rndstr length=64]
 
-/container/config/set registry-url=https://ghcr.io
-/container/add remote-image=vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
+/container/add remote-image=ghcr.io/vozdr/awg-admin:latest interface=veth-awg-admin envlists=awg-admin name=awg-admin logging=yes start-on-boot=yes
 ```
 
 Wait until the container is `stopped`, then start it:
