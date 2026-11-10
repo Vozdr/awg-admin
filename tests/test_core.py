@@ -338,6 +338,7 @@ def test_service_discovers_proxy_interface_and_address_pool(monkeypatch):
     service = AwgAdminService(Settings.from_env().primary_server, FakeRouterOS())
     service.startup_validate()
     dashboard = service.dashboard()
+    assert service.container_running is True
     assert dashboard["server"]["wireguard_interface"] == "wg-awg"
     assert dashboard["pools"] == [{"cidr": "192.168.177.0/24", "server_address": "192.168.177.1", "free_address": "192.168.177.3", "available": True}]
     assert dashboard["clients"][0]["name"] == "Alice"

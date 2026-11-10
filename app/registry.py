@@ -28,6 +28,7 @@ class ServerRuntime:
             "container_name": self.settings.awg_container_name,
             "mikrotik_host": self.settings.mikrotik_host,
             "available": error is None,
+            "container_status": "running" if self.service.container_running else "stopped",
             "error": error.payload()["error"] if error else None,
             "last_success": self.service.last_success,
         }

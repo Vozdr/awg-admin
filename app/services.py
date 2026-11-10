@@ -428,6 +428,7 @@ class AwgAdminService:
         self.operation_lock = threading.RLock()
         self.last_success: str = ""
         self.runtime_error: AppError | None = None
+        self.container_running: bool | None = None
 
     def _remember_success(self) -> None:
         self.last_success = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -457,6 +458,7 @@ class AwgAdminService:
                 None,
             )
             if not container:
+                self.container_running = False
                 raise AppError(
                     "AWG_CONTAINER_NOT_FOUND",
                     "error.containerNotFound",
@@ -464,6 +466,7 @@ class AwgAdminService:
                     status_code=503,
                     hint_key="error.containerNotFoundHint",
                 )
+            self.container_running = self._container_running(container)
             all_env_records = self.client.print(ENV_MENU, proplist=(".id", "list", "key", "value"))
             envlists = split_values(container.get("envlists", "") or container.get("envlist", ""))
             if not envlists:

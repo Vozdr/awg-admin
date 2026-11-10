@@ -3,8 +3,8 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AWGM Admin</title><link rel="stylesheet" href="/static/app.css"></head>
 <body>
   <header class="topbar"><div class="topbar-inner">
-    <div class="brand"><span class="brand-mark small">M</span><div><strong>AWGM Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverState">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings">⚙</button></div></div></div>
-    <div class="top-actions"><span class="connection-status" id="connectionStatus"><i></i><span data-i18n="status.loading">Loading</span></span><select id="languageSelect" aria-label="Language"></select><button class="icon-button" id="themeToggle" aria-label="Theme">◐</button><a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a></div>
+    <div class="brand"><span class="brand-mark small">M</span><div><strong>AWGM Admin</strong><div class="server-picker"><span data-i18n="summary.server">AWG server</span>: <select id="serverSelect" aria-label="AWG server"></select><span id="serverName" class="hidden">—</span><button type="button" class="server-settings-button" id="serverSettingsButton" data-i18n-title="server.openSettings" title="Server settings">⚙</button></div></div></div>
+    <div class="top-actions"><div class="connection-stack"><span class="connection-status loading" id="mikrotikStatus"><i></i><span>MikroTik</span></span><span class="connection-status loading" id="containerStatus"><i></i><span>AWG Container</span></span></div><select id="languageSelect" aria-label="Language"></select><button class="icon-button" id="themeToggle" aria-label="Theme">◐</button><a class="button ghost" id="logoutButton" href="/logout" data-i18n="auth.logout">Log out</a></div>
   </div></header>
 
   <main class="shell">
