@@ -7,6 +7,15 @@ on:
     paths-ignore:
       - "**/*.md"
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Git ref to build (for example v0.4.2)
+        required: false
+        type: string
+      image_tag:
+        description: Version tag to publish without updating latest (for example 0.4.2)
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,6 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -47,12 +58,18 @@ jobs:
             dockerfile: Dockerfile.armv7
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.ref }}
       - id: version
         name: Resolve application version
         shell: bash
+        env:
+          MANUAL_IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+          if [[ -n "${MANUAL_IMAGE_TAG}" ]]; then
+            version="${MANUAL_IMAGE_TAG#v}"
+          elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME#v}"
           fi
           echo "value=${version}" >> "$GITHUB_OUTPUT"
@@ -104,7 +121,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish latest
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && inputs.image_tag == ''
         shell: bash
         run: |
           ghcr_images=()
@@ -114,9 +131,9 @@ jobs:
           done
           docker buildx imagetools create --tag "${GHCR_IMAGE}:latest" "${ghcr_images[@]}"
       - name: Publish version tag
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.image_tag != ''
         env:
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ inputs.image_tag || github.ref_name }}
         shell: bash
         run: |
           ghcr_images=()
