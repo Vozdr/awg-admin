@@ -1,6 +1,6 @@
 # Multiple AWG servers
 
-[Home](../README_EN.md) · [Environment reference](ENVIRONMENT_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
+[Home](../README_EN.md) · [Русский](MULTI_SERVER_RU.md) · [Environment reference](ENVIRONMENT_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
 
 One AWG Admin container can manage multiple AWG servers on the same or different MikroTik routers. Each server has an independent API connection, AWG container, client endpoint, client defaults, and error state. The server selected in the header is stored in the browser.
 

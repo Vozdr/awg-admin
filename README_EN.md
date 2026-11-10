@@ -1,6 +1,6 @@
 # AWG Admin
 
-[GitHub Container Registry](docs/GHCR_EN.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
+[Русский](README.md) · [GitHub Container Registry](docs/GHCR_EN.md) · [Environment reference](docs/ENVIRONMENT_EN.md) · [Multiple servers](docs/MULTI_SERVER_EN.md) · [Troubleshooting](docs/TROUBLESHOOTING_EN.md)
 
 AWG Admin is a web panel for managing AmneziaWG clients on MikroTik. It is designed for the [`amneziawg-mikrotik-c` by timbrs](https://github.com/timbrs/amneziawg-mikrotik-c) server container and talks directly to RouterOS through API or API-SSL.
 

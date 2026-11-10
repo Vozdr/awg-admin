@@ -1,6 +1,6 @@
 # AWG Admin images
 
-[Home](../README_EN.md) · [Environment reference](ENVIRONMENT_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
+[Home](../README_EN.md) · [Русский](GHCR_RU.md) · [Environment reference](ENVIRONMENT_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
 
 Public AWG Admin images are published in the [GitHub Container Registry](https://github.com/Vozdr/awg-admin/pkgs/container/awg-admin):
 

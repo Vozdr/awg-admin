@@ -1,6 +1,6 @@
 # AWG Admin environment variables
 
-[Home](../README_EN.md) · [GitHub Container Registry](GHCR_EN.md) · [Multiple servers](MULTI_SERVER_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
+[Home](../README_EN.md) · [Русский](ENVIRONMENT_RU.md) · [GitHub Container Registry](GHCR_EN.md) · [Multiple servers](MULTI_SERVER_EN.md) · [Troubleshooting](TROUBLESHOOTING_EN.md)
 
 AWG Admin does not read local configuration files and has no database. All application settings come from environment variables, while operational data comes from MikroTik.
 
