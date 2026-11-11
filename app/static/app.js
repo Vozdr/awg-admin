@@ -139,7 +139,7 @@ function documentedValue(value,doc,classes="") { const help=defaultValueHelp(doc
 function updateAddVariableDocumentation(form) {
   if(!form)return;
   const envlist=form.elements.envlist.value.trim(),key=form.elements.key.value.trim(),catalog=environmentDocCatalog(),used=new Set(state.serverSettings.environment.filter(item=>item.envlist===envlist).map(item=>item.key)),protectedKeys=new Set(state.serverSettings.protected_environment_keys||[]),list=$("#environmentKeyOptions",form);
-  list.innerHTML=catalog.filter(item=>!item.pattern&&!used.has(item.key)&&!protectedKeys.has(item.key)).map(item=>`<option value="${escapeHtml(item.key)}" label="${escapeHtml(item.description||"")}"></option>`).join("");
+  list.innerHTML=catalog.filter(item=>!item.pattern&&!used.has(item.key)&&!protectedKeys.has(item.key)).map(item=>`<option value="${escapeHtml(item.key)}"></option>`).join("");
   const doc=catalog.find(item=>item.key===key),description=$("[data-add-key-description]",form),defaultHint=$("[data-add-default]",form),required=$("[data-add-required]",form);
   description.textContent=doc?.description||"";description.classList.toggle("hidden",!description.textContent);
   defaultHint.textContent=defaultValueHelp(doc);defaultHint.classList.toggle("hidden",!defaultHint.textContent);
