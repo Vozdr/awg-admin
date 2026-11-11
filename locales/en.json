@@ -1,6 +1,8 @@
 {
+  "serverSettings.requiredMissing": "Required variables are missing: {keys}. Add them for the AWG container to work correctly.", "serverSettings.requiredDisabled": "Required variables are disabled: {keys}. Enable them for the AWG container to work correctly.", "serverSettings.requiredEmpty": "Required variables have no value: {keys}. Enter their values.",
   "serverSettings.defaultValue": "Default: {value}", "serverSettings.noDefault": "none", "serverSettings.requiredKey": "Required key", "serverSettings.requiredKeyWithNote": "Required key: {note}", "serverSettings.userComment": "Comment:", "serverSettings.fullDocs": "Detailed key reference",
   "error.envVariableDuplicate": "Variable “{key}” already exists in envlist “{envlist}”.",
+  "error.requiredEnvProtected": "Required variable “{key}” cannot be disabled or deleted.",
   "language.name": "English", "language.nativeName": "English",
   "login.subtitle": "Manage AmneziaWG on MikroTik", "login.username": "Username", "login.password": "Password", "login.submit": "Sign in", "login.invalid": "Invalid username or password", "login.rateLimited": "Too many attempts. Try again in a few minutes.",
   "status.loading": "Loading", "status.connected": "MikroTik connected", "status.disconnected": "Disconnected",

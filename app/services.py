@@ -88,6 +88,33 @@ BASE_REQUIRED_AWG_ENV = {
     "AWG_CLIENT_PUBS",
 }
 
+
+def required_awg_environment_keys() -> set[str]:
+    return awg_environment_docs.unconditional_required_keys()
+
+
+def required_environment_issues(
+    records: list[dict[str, str]], required_keys: set[str]
+) -> dict[str, list[str]]:
+    by_key: dict[str, list[dict[str, str]]] = {}
+    for record in records:
+        if record.get("key"):
+            by_key.setdefault(record["key"], []).append(record)
+    missing: list[str] = []
+    disabled: list[str] = []
+    empty: list[str] = []
+    for key in sorted(required_keys):
+        key_records = by_key.get(key, [])
+        if not key_records:
+            missing.append(key)
+            continue
+        enabled = [record for record in key_records if not bool_value(record.get("disabled", ""))]
+        if not enabled:
+            disabled.append(key)
+        elif not any(record.get("value", "").strip() for record in enabled):
+            empty.append(key)
+    return {"missing": missing, "disabled": disabled, "empty": empty}
+
 AWG_ENV_TO_CONFIG = {
     "AWG_JC": "Jc",
     "AWG_JMIN": "Jmin",
@@ -531,7 +558,7 @@ class AwgAdminService:
                     if item.get("key"):
                         env[item["key"]] = item.get("value", "")
             missing = sorted(BASE_REQUIRED_AWG_ENV - env.keys())
-            if missing:
+            if validate and missing:
                 raise AppError(
                     "AWG_ENV_INVALID",
                     "error.awgEnvInvalid",
@@ -539,7 +566,7 @@ class AwgAdminService:
                     status_code=503,
                     hint_key="error.awgEnvInvalidHint",
                 )
-            if env.get("AWG_MODE", "").lower() != "server":
+            if validate and env.get("AWG_MODE", "").lower() != "server":
                 raise AppError(
                     "AWG_MODE_INVALID",
                     "error.awgModeInvalid",
@@ -551,6 +578,13 @@ class AwgAdminService:
                 proplist=(".id", "name", "listen-port", "public-key", "private-key", "disabled", "running", "mtu"),
             )
             matches = [item for item in interfaces if item.get("public-key") == env.get("AWG_SERVER_PUB")]
+            if len(matches) != 1 and not validate:
+                remote_port = env.get("AWG_REMOTE", "").rsplit(":", 1)[-1]
+                port_matches = [item for item in interfaces if remote_port and item.get("listen-port") == remote_port]
+                if len(port_matches) == 1:
+                    matches = port_matches
+                elif len(interfaces) == 1:
+                    matches = interfaces
             if len(matches) != 1:
                 raise AppError(
                     "WG_INTERFACE_NOT_FOUND",
@@ -560,7 +594,7 @@ class AwgAdminService:
                     hint_key="error.wgInterfaceNotFoundHint",
                 )
             wireguard = matches[0]
-            if bool_value(wireguard.get("disabled", "")):
+            if validate and bool_value(wireguard.get("disabled", "")):
                 raise AppError(
                     "WG_INTERFACE_DISABLED",
                     "error.wgInterfaceDisabled",
@@ -572,7 +606,7 @@ class AwgAdminService:
                 for item in self.client.print(ADDRESS_MENU, proplist=(".id", "address", "network", "interface", "disabled"))
                 if item.get("interface") == wireguard.get("name") and not bool_value(item.get("disabled", ""))
             ]
-            if not addresses:
+            if validate and not addresses:
                 raise AppError(
                     "WG_ADDRESSES_MISSING",
                     "error.wgAddressesMissing",
@@ -580,7 +614,7 @@ class AwgAdminService:
                     status_code=503,
                 )
             remote_port = env.get("AWG_REMOTE", "").rsplit(":", 1)[-1]
-            if remote_port and wireguard.get("listen-port") and remote_port != wireguard.get("listen-port"):
+            if validate and remote_port and wireguard.get("listen-port") and remote_port != wireguard.get("listen-port"):
                 raise AppError(
                     "AWG_WG_PORT_MISMATCH",
                     "error.portMismatch",
@@ -778,6 +812,7 @@ class AwgAdminService:
             list_key_counts[(envlist, key)] = list_key_counts.get((envlist, key), 0) + 1
         managed_keys = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"}
         read_only_keys = managed_keys | {"AWG_REMOTE", "AWG_HEADER_PROTECTION_KEY"}
+        required_keys = required_awg_environment_keys()
         env_rows: list[dict[str, Any]] = []
         for record in sorted(context.env_records, key=lambda item: (item.get("key", ""), item.get("list", ""), item.get(".id", ""))):
             key = record.get("key", "")
@@ -790,6 +825,7 @@ class AwgAdminService:
                 "comment": record.get("comment", ""),
                 "disabled": bool_value(record.get("disabled", "")),
                 "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, ""),
+                "required": key in required_keys,
                 "managed": key in managed_keys,
                 "read_only": key in read_only_keys or key == "AWG_SERVER_PUB",
                 "special_action": "regenerate-server-key" if key == "AWG_SERVER_PUB" else "regenerate-header-key" if key == "AWG_HEADER_PROTECTION_KEY" else "",
@@ -801,6 +837,8 @@ class AwgAdminService:
             "environment": env_rows,
             "environment_docs": awg_environment_docs.info(),
             "protected_environment_keys": sorted(PROTECTED_AWG_ENV_KEYS),
+            "required_environment_keys": sorted(required_keys),
+            "required_environment": required_environment_issues(context.env_records, required_keys),
             "envlists": context.envlists,
             "existing_envlists": sorted({item.get("list", "") for item in context.all_env_records if item.get("list")}),
             "addresses": [{"id": item.get(".id", ""), "address": item.get("address", "")} for item in context.addresses],
@@ -936,6 +974,7 @@ class AwgAdminService:
             current_by_id = {item.get(".id", ""): item for item in context.env_records}
             address_by_id = {item.get(".id", ""): item for item in context.addresses}
             protected = PROTECTED_AWG_ENV_KEYS
+            required_keys = required_awg_environment_keys()
             new_lists: list[str] = []
             added_pairs: set[tuple[str, str]] = set()
             for change in data.env_changes:
@@ -951,6 +990,14 @@ class AwgAdminService:
                         )
                     self.validate_env_variable(change.envlist, change.key)
                     added_pairs.add(pair)
+                    if change.key in required_keys and change.disabled:
+                        raise AppError(
+                            "REQUIRED_ENV_PROTECTED",
+                            "error.requiredEnvProtected",
+                            technical=f"required variable {change.key!r} cannot be added disabled",
+                            status_code=422,
+                            message_args={"key": change.key},
+                        )
                     if change.key in protected:
                         raise AppError("ENV_VARIABLE_MANAGED", "error.envVariableManaged", technical=change.key, status_code=422)
                     if change.envlist not in context.envlists and change.envlist not in new_lists:
@@ -959,6 +1006,16 @@ class AwgAdminService:
                     current = current_by_id.get(change.id)
                     if not current:
                         raise AppError("ENV_VARIABLE_NOT_FOUND", "error.envVariableNotFound", technical=change.id, status_code=409)
+                    if current.get("key") in required_keys and (
+                        change.action == "delete" or (change.action == "update" and change.disabled)
+                    ):
+                        raise AppError(
+                            "REQUIRED_ENV_PROTECTED",
+                            "error.requiredEnvProtected",
+                            technical=f"required variable {current.get('key')!r} cannot be disabled or deleted",
+                            status_code=422,
+                            message_args={"key": current.get("key", "")},
+                        )
                     if current.get("key") in protected:
                         raise AppError("ENV_VARIABLE_MANAGED", "error.envVariableManaged", technical=current.get("key", ""), status_code=422)
             normalized_addresses: dict[int, str] = {}

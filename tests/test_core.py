@@ -27,6 +27,7 @@ from app.services import (
     make_vpn_uri,
     parse_conf,
     qr_data_url,
+    required_environment_issues,
     wireguard_public_key,
 )
 from app.settings import Settings, SettingsError
@@ -88,6 +89,7 @@ def test_parse_awg_environment_document_expands_ranges_and_required_notes():
     assert parsed["AWG_MODE"]["default"] == "normal"
     assert parsed["AWG_LISTEN"]["default"] is None
     assert parsed["AWG_CLIENT_PUB"]["required"] is True
+    assert parsed["AWG_CLIENT_PUB"]["required_marker"] == "*"
     assert "server режиме" in parsed["AWG_CLIENT_PUB"]["required_note"]
     assert "AWG_FB2_*" in parsed
 
@@ -100,7 +102,7 @@ def test_awg_environment_docs_keep_bundled_copy_when_refresh_fails(monkeypatch, 
     table = "| Variable | Required | Default | Description |\n|---|---|---|---|\n" + "\n".join(
         f"| `{key}` | {'Yes' if key in {'AWG_LISTEN', 'AWG_REMOTE', 'AWG_SERVER_PUB'} else 'No'} | -- | Description for {key} |"
         for key in keys
-    )
+    ) + "\n| `AWG_CONDITIONAL` | Yes* | -- | Conditional key |\n\n`*` Required only in a special mode."
     (bundle / "env.ru.md").write_text(table, encoding="utf-8")
     (bundle / "env.en.md").write_text(table, encoding="utf-8")
     monkeypatch.setattr(awg_docs_module, "BUNDLED_DIR", bundle)
@@ -112,7 +114,23 @@ def test_awg_environment_docs_keep_bundled_copy_when_refresh_fails(monkeypatch, 
 
     info = docs.info()
     assert info["sources"] == {"ru": "bundled", "en": "bundled"}
-    assert len(info["catalog"]["ru"]) == len(keys)
+    assert len(info["catalog"]["ru"]) == len(keys) + 1
+    assert docs.unconditional_required_keys() == {"AWG_LISTEN", "AWG_REMOTE", "AWG_SERVER_PUB"}
+    assert "AWG_CONDITIONAL" not in docs.unconditional_required_keys()
+
+
+def test_required_environment_issues_distinguish_missing_disabled_and_empty():
+    records = [
+        {"key": "ACTIVE", "value": "1", "disabled": "no"},
+        {"key": "DISABLED", "value": "1", "disabled": "yes"},
+        {"key": "EMPTY", "value": "", "disabled": "no"},
+        {"key": "DUPLICATE", "value": "", "disabled": "yes"},
+        {"key": "DUPLICATE", "value": "ready", "disabled": "no"},
+    ]
+
+    result = required_environment_issues(records, {"ACTIVE", "DISABLED", "EMPTY", "DUPLICATE", "MISSING"})
+
+    assert result == {"missing": ["MISSING"], "disabled": ["DISABLED"], "empty": ["EMPTY"]}
 
 
 def test_extract_container_start_failure_returns_last_safe_error_block():
@@ -551,6 +569,61 @@ def test_server_settings_reject_existing_unassigned_envlist(monkeypatch):
     assert raised.value.message_key == "error.envlistNotAssignedVariable"
     assert raised.value.payload()["error"]["message_args"] == {"key": "NEW_KEY", "envlist": "other-container"}
     assert service.validate_env_variable("new-unique-list", "NEW_KEY")["new_envlist"] is True
+
+
+def test_server_settings_report_required_variable_problems(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    router.env_records = [item for item in router.env_records if item["key"] != "AWG_JC"]
+    next(item for item in router.env_records if item["key"] == "AWG_JMIN")["disabled"] = "yes"
+    next(item for item in router.env_records if item["key"] == "AWG_JMAX")["value"] = ""
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+
+    result = service.server_settings()
+
+    assert "AWG_JC" in result["required_environment"]["missing"]
+    assert "AWG_JMIN" in result["required_environment"]["disabled"]
+    assert "AWG_JMAX" in result["required_environment"]["empty"]
+    assert next(item for item in result["environment"] if item["key"] == "AWG_S1")["required"] is True
+    with pytest.raises(AppError) as raised:
+        service.load_context(validate=True)
+    assert raised.value.code == "AWG_ENV_INVALID"
+
+
+@pytest.mark.parametrize("change", [
+    {"action": "delete", "id": "AWG_JC"},
+    {"action": "update", "id": "AWG_JC", "value": "7", "disabled": True},
+])
+def test_server_settings_protect_required_variables(monkeypatch, change):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    row = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+    payload_change = {**change, "id": row["id"], "envlist": row["envlist"], "key": row["key"]}
+    payload = ServerSettingsUpdate.parse_obj({"revision": current["revision"], "env_changes": [payload_change]})
+
+    with pytest.raises(AppError) as raised:
+        service.update_server_settings(payload)
+
+    assert raised.value.code == "REQUIRED_ENV_PROTECTED"
+    assert router.container_status == "running"
+
+
+def test_server_settings_reject_empty_updated_value():
+    with pytest.raises(ValueError):
+        ServerSettingsUpdate.parse_obj({
+            "revision": "1" * 64,
+            "env_changes": [{"action": "update", "id": "*1", "envlist": "awg-base", "key": "OPTIONAL", "value": ""}],
+        })
 
 
 def test_server_settings_reject_duplicate_variable_in_same_envlist(monkeypatch):

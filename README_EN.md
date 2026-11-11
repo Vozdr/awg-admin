@@ -6,8 +6,6 @@ AWGM Admin is a web panel for managing AmneziaWG clients on MikroTik. It is desi
 
 The panel has no database or local configuration files. Clients, comments, addresses, keys, and statistics are read directly from MikroTik. Public peer keys are synchronized with the proxy container's `AWG_CLIENT_PUBS` variable.
 
-The project was previously named AWG Admin. Existing installations do not need to rename environment variables, environment lists, veth interfaces, API users, or containers; only the published image address has changed.
-
 Features:
 
 - allocate the first free IPv4 address from a selected WireGuard interface subnet;

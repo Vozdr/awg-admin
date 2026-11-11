@@ -93,8 +93,8 @@ class EnvVariableChange(BaseModel):
 
     @root_validator
     def require_added_value(cls, values: dict[str, object]) -> dict[str, object]:
-        if values.get("action") == "add" and not str(values.get("value", "")).strip():
-            raise ValueError("value is required when adding an environment variable")
+        if values.get("action") in {"add", "update"} and not str(values.get("value", "")).strip():
+            raise ValueError("value is required when adding or updating an environment variable")
         return values
 
 

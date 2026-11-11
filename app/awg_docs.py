@@ -74,6 +74,7 @@ def parse_environment_document(text: str) -> dict[str, dict[str, Any]]:
                 "key": key,
                 "default": default_value,
                 "required": required,
+                "required_marker": marker,
                 "required_note": footnotes.get(marker, "") if required and marker else "",
                 "description": description,
             }
@@ -174,6 +175,15 @@ class AwgEnvironmentDocs:
                     item["key"] = key
                     return item
         return {}
+
+    def unconditional_required_keys(self) -> set[str]:
+        with self._lock:
+            rows = self._docs.get("en") or self._docs.get("ru", {})
+            return {
+                key
+                for key, item in rows.items()
+                if item.get("required") and not item.get("required_marker") and "*" not in key
+            }
 
     def info(self) -> dict[str, Any]:
         with self._lock:

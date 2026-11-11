@@ -1,6 +1,8 @@
 {
+  "serverSettings.requiredMissing": "Отсутствуют обязательные переменные: {keys}. Добавьте их для корректной работы AWG-контейнера.", "serverSettings.requiredDisabled": "Отключены обязательные переменные: {keys}. Включите их для корректной работы AWG-контейнера.", "serverSettings.requiredEmpty": "Не заполнены обязательные переменные: {keys}. Укажите для них значения.",
   "serverSettings.defaultValue": "По умолчанию: {value}", "serverSettings.noDefault": "нет", "serverSettings.requiredKey": "Обязательный ключ", "serverSettings.requiredKeyWithNote": "Обязательный ключ: {note}", "serverSettings.userComment": "Комментарий:", "serverSettings.fullDocs": "Подробная инструкция по ключам",
   "error.envVariableDuplicate": "Переменная «{key}» уже существует в envlist «{envlist}».",
+  "error.requiredEnvProtected": "Обязательную переменную «{key}» нельзя отключить или удалить.",
   "language.name": "Russian", "language.nativeName": "Русский",
   "login.subtitle": "Управление AmneziaWG на MikroTik", "login.username": "Логин", "login.password": "Пароль", "login.submit": "Войти", "login.invalid": "Неверный логин или пароль", "login.rateLimited": "Слишком много попыток. Попробуйте через несколько минут.",
   "status.loading": "Загрузка", "status.connected": "MikroTik подключён", "status.disconnected": "Нет связи",
