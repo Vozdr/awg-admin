@@ -20,6 +20,7 @@ from app.services import (
     clean_comment_metadata,
     comment_with_disabled_at,
     configuration_filename,
+    extract_container_start_failure,
     generate_wireguard_key_pair,
     make_vpn_uri,
     parse_conf,
@@ -62,6 +63,25 @@ def test_configuration_filename_uses_server_and_client_names():
     assert configuration_filename("AWG Home", "peer-phone") == "AWG Home+peer-phone.conf"
     assert configuration_filename('Домашний/AWG:*?', 'Телефон+Иван/1') == "Домашний_AWG+Телефон_Иван_1.conf"
     assert configuration_filename("***", "///") == "server+client.conf"
+
+
+def test_extract_container_start_failure_returns_last_safe_error_block():
+    records = [
+        {"time": "07:55:00", "message": "AWG-Server-v3 *** start"},
+        {"time": "07:55:00", "message": "AWG-Server-v3 FATAL: old failure"},
+        {"time": "07:55:00", "message": "AWG-Server-v3 *** error: exited with status 1"},
+        {"time": "07:56:22", "message": "AWG-Server-v3 *** start"},
+        {"time": "07:56:22", "message": "AWG-Server-v3 *** started PATH=/usr/bin AWG_SECRET=hidden /awg-proxy"},
+        {"time": "07:56:22", "message": "AWG-Server-v3:: FATAL: AWG_S4: must be >= 12"},
+        {"time": "07:56:22", "message": "AWG-Server-v3 *** error: exited with status 1"},
+    ]
+
+    result = extract_container_start_failure(records, "AWG-Server-v3")
+
+    assert "AWG_S4: must be >= 12" in result
+    assert "exited with status 1" in result
+    assert "old failure" not in result
+    assert "PATH=" not in result
 
 
 class MutableRouterOS(FakeRouterOS):
@@ -590,6 +610,46 @@ def test_server_settings_conflict_and_rollback(monkeypatch):
             "address_changes": [{"action": "add", "address": "10.10.10.1/24"}],
         }))
     assert failure.value.code == "MIKROTIK_API_ERROR"
+    assert next(item for item in router.env_records if item["key"] == "AWG_JC")["value"] == "7"
+    assert router.container_status == "running"
+
+
+def test_failed_new_settings_report_successful_rollback(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    row = next(item for item in current["environment"] if item["key"] == "AWG_JC")
+    start_attempts = 0
+
+    def wait_container(_container_id, running, _timeout):
+        nonlocal start_attempts
+        if not running:
+            return
+        start_attempts += 1
+        if start_attempts == 1:
+            raise AppError(
+                "PROXY_RESTART_FAILED",
+                "error.proxyRestartFailed",
+                technical="container status=error",
+                status_code=502,
+            )
+
+    monkeypatch.setattr(service, "_wait_container", wait_container)
+    monkeypatch.setattr(service, "_container_start_failure_log", lambda: "07:56:22 FATAL: invalid AWG setting")
+
+    with pytest.raises(AppError) as raised:
+        service.update_server_settings(ServerSettingsUpdate.parse_obj({
+            "revision": current["revision"],
+            "env_changes": [{"action": "update", "id": row["id"], "envlist": row["envlist"], "key": row["key"], "value": "999", "comment": "", "disabled": False}],
+        }))
+
+    assert raised.value.code == "SERVER_SETTINGS_ROLLED_BACK"
+    assert "invalid AWG setting" in raised.value.technical
     assert next(item for item in router.env_records if item["key"] == "AWG_JC")["value"] == "7"
     assert router.container_status == "running"
 

@@ -239,8 +239,13 @@ class RouterOSClient:
                 # the panel immediately after the current operation.
                 self.close()
 
-    def print(self, menu: str, proplist: Iterable[str] | None = None) -> list[dict[str, str]]:
-        return self.command(f"/{menu.strip('/')}/print", proplist=proplist)
+    def print(
+        self,
+        menu: str,
+        proplist: Iterable[str] | None = None,
+        queries: Iterable[str] | None = None,
+    ) -> list[dict[str, str]]:
+        return self.command(f"/{menu.strip('/')}/print", proplist=proplist, queries=queries)
 
     def add(self, menu: str, values: dict[str, object]) -> str:
         result = self.command(f"/{menu.strip('/')}/add", attributes=values)

@@ -45,6 +45,31 @@ def configuration_filename(server_name: str, client_name: str) -> str:
     return f"{safe_part(server_name, 'server')}+{safe_part(client_name, 'client')}.conf"
 
 
+def extract_container_start_failure(records: list[dict[str, str]], container_name: str) -> str:
+    entries: list[tuple[str, str]] = []
+    for record in records:
+        message = (record.get("message", "") or record.get("msg", "")).strip()
+        if not message:
+            continue
+        message = re.sub(rf"^{re.escape(container_name)}(?:::?|)\s+", "", message, count=1)
+        entries.append((record.get("time", "").strip(), message))
+    if not entries:
+        return ""
+
+    end = next((index for index in range(len(entries) - 1, -1, -1) if "*** error: exited with status" in entries[index][1]), -1)
+    if end < 0:
+        return ""
+    start = next((index for index in range(end, -1, -1) if entries[index][1] == "*** start"), -1)
+    useful: list[str] = []
+    for timestamp, message in entries[start + 1:end + 1]:
+        if message.startswith("*** started PATH="):
+            continue
+        if message in {"*** start", "*** restart"}:
+            continue
+        useful.append(f"{timestamp} {message}".strip())
+    return "\n".join(useful)[-3000:]
+
+
 BASE_REQUIRED_AWG_ENV = {
     "AWG_MODE",
     "AWG_LISTEN",
@@ -851,7 +876,8 @@ class AwgAdminService:
         return str(address)
 
     def _wait_container(self, container_id: str, running: bool, timeout: int) -> None:
-        deadline = time.monotonic() + timeout
+        started = time.monotonic()
+        deadline = started + timeout
         last_status = ""
         while time.monotonic() < deadline:
             records = self.client.print(CONTAINER_MENU, proplist=(".id", "status", "running"))
@@ -861,6 +887,9 @@ class AwgAdminService:
             last_status = current.get("status", "")
             if self._container_running(current) is running:
                 return
+            normalized_status = last_status.strip().lower()
+            if running and ("error" in normalized_status or (normalized_status == "stopped" and time.monotonic() - started >= 3)):
+                break
             time.sleep(1)
         raise AppError(
             "PROXY_RESTART_FAILED",
@@ -869,6 +898,18 @@ class AwgAdminService:
             status_code=502,
             hint_key="error.proxyRestartFailedHint",
         )
+
+    def _container_start_failure_log(self) -> str:
+        try:
+            records = self.client.print(
+                "container/log",
+                proplist=("time", "message"),
+                queries=(f"?container={self.settings.awg_container_name}",),
+            )
+        except Exception:
+            LOGGER.exception("Unable to read RouterOS container log after failed start")
+            return ""
+        return extract_container_start_failure(records, self.settings.awg_container_name)
 
     def update_server_settings(self, data: ServerSettingsUpdate) -> dict[str, Any]:
         with self.operation_lock:
@@ -1009,17 +1050,40 @@ class AwgAdminService:
                 if was_running:
                     self.client.action(CONTAINER_MENU, "start", container_id)
                     self._wait_container(container_id, True, 30)
-            except Exception:
+            except Exception as exc:
+                start_failure = (
+                    self._container_start_failure_log()
+                    if isinstance(exc, AppError) and exc.code == "PROXY_RESTART_FAILED"
+                    else ""
+                )
+                rollback_ok = True
                 for undo in reversed(undo_actions):
                     try:
                         undo()
                     except Exception:
+                        rollback_ok = False
                         LOGGER.exception("Failed to roll back an AWG server settings change")
+                restored_running_state = not was_running
                 if was_running:
                     try:
                         self.client.action(CONTAINER_MENU, "start", container_id)
+                        self._wait_container(container_id, True, 30)
+                        restored_running_state = True
                     except Exception:
+                        rollback_ok = False
                         LOGGER.exception("Failed to restart AWG container after settings update error")
+                if isinstance(exc, AppError) and exc.code == "PROXY_RESTART_FAILED" and rollback_ok and restored_running_state:
+                    technical = "AWG container rejected the proposed settings; previous settings were restored."
+                    if start_failure:
+                        technical += f"\n\nLast failed start:\n{start_failure}"
+                    else:
+                        technical += f"\n\n{exc.technical}"
+                    raise AppError(
+                        "SERVER_SETTINGS_ROLLED_BACK",
+                        "error.serverSettingsRolledBack",
+                        technical=technical,
+                        status_code=422,
+                    ) from exc
                 raise
             self._remember_success()
             return self.server_settings()

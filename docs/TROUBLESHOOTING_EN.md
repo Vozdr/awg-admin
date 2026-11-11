@@ -69,9 +69,10 @@ A stopped AWG container alone is not a fatal error. Its behavior is described in
 | Code | Meaning | Resolution |
 |---|---|---|
 | `ENVLIST_NOT_ASSIGNED` | The entered `envlist` name already exists under `/container/envs` but is not assigned to the current AWG container. | Select an envlist assigned to this container or enter a unique name for a new envlist. |
-| `ENV_VARIABLE_MANAGED` | A request attempted to edit, disable, or delete a panel-managed variable. | Refresh the settings. `AWG_CLIENT_PUB`, `AWG_CLIENT_PUBS`, `AWG_REMOTE`, and `AWG_SERVER_PUB` change only through their related panel operations. |
+| `ENV_VARIABLE_MANAGED` | A request attempted to edit, disable, or delete a panel-managed variable. | Refresh the settings. `AWG_CLIENT_PUB`, `AWG_CLIENT_PUBS`, `AWG_REMOTE`, `AWG_SERVER_PUB`, and `AWG_HEADER_PROTECTION_KEY` change only through their related panel operations. |
 | `ENV_VARIABLE_NOT_FOUND` | The variable was removed after the settings window was opened. | Close and reopen the settings. |
 | `SERVER_SETTINGS_CONFLICT` | Environment records, addresses, the port, or the WireGuard key changed in MikroTik after the window was opened. | Close and reopen the window, then apply the intended edits to the current data. |
+| `SERVER_SETTINGS_ROLLED_BACK` | The AWG container could not start with the proposed settings. The panel restored the previous values and successfully returned the container to its original running state. | Expand Technical details: the panel retrieves the latest failed-start reason through `/container/log/print`, using the container name. Correct the parameters and save again. |
 | `SERVER_ADDRESS_INVALID` | An interface address is not a valid IPv4 address with a CIDR prefix. | Correct it, for example to `192.168.177.1/24`. |
 | `SERVER_ADDRESS_NOT_FOUND` | An address was removed from MikroTik after the window was opened. | Close and reopen the settings. |
 | `SERVER_ADDRESS_DUPLICATE` | The same address was entered more than once. | Remove the duplicate field. |
