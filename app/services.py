@@ -815,9 +815,10 @@ class AwgAdminService:
         if envlist in existing_lists and envlist not in context.envlists:
             raise AppError(
                 "ENVLIST_NOT_ASSIGNED",
-                "error.envlistNotAssigned",
+                "error.envlistNotAssignedVariable",
                 technical=f"envlist {envlist!r} exists but is not assigned to container {self.settings.awg_container_name!r}",
                 status_code=409,
+                message_args={"key": key, "envlist": envlist},
             )
         duplicates = [
             item for item in context.all_env_records

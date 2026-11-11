@@ -478,6 +478,8 @@ def test_server_settings_reject_existing_unassigned_envlist(monkeypatch):
         service.validate_env_variable("other-container", "NEW_KEY")
 
     assert raised.value.code == "ENVLIST_NOT_ASSIGNED"
+    assert raised.value.message_key == "error.envlistNotAssignedVariable"
+    assert raised.value.payload()["error"]["message_args"] == {"key": "NEW_KEY", "envlist": "other-container"}
     assert service.validate_env_variable("new-unique-list", "NEW_KEY")["new_envlist"] is True
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 SECRET_PATTERNS = (
@@ -29,6 +29,7 @@ class AppError(Exception):
     status_code: int = 500
     hint_key: str = ""
     request_id: str = ""
+    message_args: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.request_id:
@@ -40,6 +41,7 @@ class AppError(Exception):
             "error": {
                 "code": self.code,
                 "message_key": self.message_key,
+                "message_args": {key: redact(value) for key, value in self.message_args.items()},
                 "hint_key": self.hint_key,
                 "technical": redact(self.technical),
                 "request_id": self.request_id,
