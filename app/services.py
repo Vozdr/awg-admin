@@ -850,6 +850,14 @@ class AwgAdminService:
             if item.get("list") in context.envlists and item.get("key") == key
         ]
         duplicates_in_list = [item for item in duplicates if item.get("list") == envlist]
+        if duplicates_in_list:
+            raise AppError(
+                "ENV_VARIABLE_DUPLICATE",
+                "error.envVariableDuplicate",
+                technical=f"variable {key!r} already exists in envlist {envlist!r}",
+                status_code=409,
+                message_args={"key": key, "envlist": envlist},
+            )
         return {
             "ok": True,
             "new_envlist": envlist not in existing_lists,
@@ -925,9 +933,20 @@ class AwgAdminService:
             address_by_id = {item.get(".id", ""): item for item in context.addresses}
             protected = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB", "AWG_HEADER_PROTECTION_KEY"}
             new_lists: list[str] = []
+            added_pairs: set[tuple[str, str]] = set()
             for change in data.env_changes:
                 if change.action == "add":
+                    pair = (change.envlist, change.key)
+                    if pair in added_pairs:
+                        raise AppError(
+                            "ENV_VARIABLE_DUPLICATE",
+                            "error.envVariableDuplicate",
+                            technical=f"variable {change.key!r} is added more than once to envlist {change.envlist!r}",
+                            status_code=409,
+                            message_args={"key": change.key, "envlist": change.envlist},
+                        )
                     self.validate_env_variable(change.envlist, change.key)
+                    added_pairs.add(pair)
                     if change.key in protected:
                         raise AppError("ENV_VARIABLE_MANAGED", "error.envVariableManaged", technical=change.key, status_code=422)
                     if change.envlist not in context.envlists and change.envlist not in new_lists:

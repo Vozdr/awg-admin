@@ -503,6 +503,46 @@ def test_server_settings_reject_existing_unassigned_envlist(monkeypatch):
     assert service.validate_env_variable("new-unique-list", "NEW_KEY")["new_envlist"] is True
 
 
+def test_server_settings_reject_duplicate_variable_in_same_envlist(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    service = AwgAdminService(Settings.from_env().primary_server, MutableRouterOS())
+
+    with pytest.raises(AppError) as raised:
+        service.validate_env_variable("awg-base", "AWG_JC")
+
+    assert raised.value.code == "ENV_VARIABLE_DUPLICATE"
+    assert raised.value.payload()["error"]["message_args"] == {"key": "AWG_JC", "envlist": "awg-base"}
+
+
+def test_server_settings_reject_duplicate_staged_additions(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    payload = ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [
+            {"action": "add", "envlist": "new-list", "key": "NEW_KEY", "value": "one"},
+            {"action": "add", "envlist": "new-list", "key": "NEW_KEY", "value": "two"},
+        ],
+    })
+
+    with pytest.raises(AppError) as raised:
+        service.update_server_settings(payload)
+
+    assert raised.value.code == "ENV_VARIABLE_DUPLICATE"
+    assert not any(item["key"] == "NEW_KEY" for item in router.env_records)
+    assert router.container_status == "running"
+
+
 def test_server_settings_apply_staged_changes_and_restart(monkeypatch):
     monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
     monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
