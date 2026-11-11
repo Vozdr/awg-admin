@@ -11,7 +11,9 @@ import zlib
 
 import pytest
 
+import app.awg_docs as awg_docs_module
 from app.errors import AppError, redact
+from app.awg_docs import AwgEnvironmentDocs, parse_environment_document
 from app.registry import ServerRegistry
 from app.routeros import decode_length, encode_length, parse_sentence
 from app.services import (
@@ -63,6 +65,54 @@ def test_configuration_filename_uses_server_and_client_names():
     assert configuration_filename("AWG Home", "peer-phone") == "AWG Home+peer-phone.conf"
     assert configuration_filename('Домашний/AWG:*?', 'Телефон+Иван/1') == "Домашний_AWG+Телефон_Иван_1.conf"
     assert configuration_filename("***", "///") == "server+client.conf"
+
+
+def test_parse_awg_environment_document_expands_ranges_and_required_notes():
+    document = """
+| Переменная | Обязательная | По умолчанию | Описание |
+|---|---|---|---|
+| `AWG_LISTEN` | Да | -- | Адрес прослушивания |
+| `AWG_REMOTE` | Да | -- | Адрес сервера |
+| `AWG_MODE` | Нет | `normal` | Режим работы |
+| `AWG_SERVER_PUB` | Да | -- | Публичный ключ |
+| `AWG_H1`--`AWG_H4` | Да | -- | Типы сообщений |
+| `AWG_CLIENT_PUB` | Да* | -- | Ключ клиента |
+| `AWG_FB2_*`, `AWG_FB3_*` | Нет | `0` | Резервные профили |
+
+`*` В server режиме должен быть задан один из вариантов ключа.
+"""
+
+    parsed = parse_environment_document(document)
+
+    assert all(f"AWG_H{index}" in parsed for index in range(1, 5))
+    assert parsed["AWG_MODE"]["default"] == "normal"
+    assert parsed["AWG_LISTEN"]["default"] is None
+    assert parsed["AWG_CLIENT_PUB"]["required"] is True
+    assert "server режиме" in parsed["AWG_CLIENT_PUB"]["required_note"]
+    assert "AWG_FB2_*" in parsed
+
+
+def test_awg_environment_docs_keep_bundled_copy_when_refresh_fails(monkeypatch, tmp_path):
+    bundle = tmp_path / "bundle"
+    cache = tmp_path / "cache"
+    bundle.mkdir()
+    keys = ["AWG_LISTEN", "AWG_REMOTE", "AWG_MODE", "AWG_SERVER_PUB"] + [f"AWG_TEST_{index}" for index in range(25)]
+    table = "| Variable | Required | Default | Description |\n|---|---|---|---|\n" + "\n".join(
+        f"| `{key}` | {'Yes' if key in {'AWG_LISTEN', 'AWG_REMOTE', 'AWG_SERVER_PUB'} else 'No'} | -- | Description for {key} |"
+        for key in keys
+    )
+    (bundle / "env.ru.md").write_text(table, encoding="utf-8")
+    (bundle / "env.en.md").write_text(table, encoding="utf-8")
+    monkeypatch.setattr(awg_docs_module, "BUNDLED_DIR", bundle)
+    monkeypatch.setattr(awg_docs_module, "CACHE_DIR", cache)
+    docs = AwgEnvironmentDocs()
+    monkeypatch.setattr(docs, "_download", lambda _url: (_ for _ in ()).throw(OSError("offline")))
+
+    docs.refresh()
+
+    info = docs.info()
+    assert info["sources"] == {"ru": "bundled", "en": "bundled"}
+    assert len(info["catalog"]["ru"]) == len(keys)
 
 
 def test_extract_container_start_failure_returns_last_safe_error_block():

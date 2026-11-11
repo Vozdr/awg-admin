@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
 
 from .auth import SESSION_COOKIE, SESSION_MAX_AGE, AuthManager, client_address
+from .awg_docs import awg_environment_docs
 from .errors import AppError, unknown_error
 from .i18n import Locales
 from .models import (
@@ -88,6 +89,7 @@ async def lifespan(_: FastAPI):
         except AppError as exc:
             LOGGER.error("Fatal startup check failed code=%s detail=%s", exc.code, exc.technical)
             raise RuntimeError(f"{exc.code}: {exc.technical}") from exc
+    await run_in_threadpool(awg_environment_docs.refresh)
     yield
     registry.close()
 

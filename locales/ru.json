@@ -1,4 +1,5 @@
 {
+  "serverSettings.defaultValue": "По умолчанию: {value}", "serverSettings.noDefault": "нет", "serverSettings.requiredKey": "Обязательный ключ", "serverSettings.requiredKeyWithNote": "Обязательный ключ: {note}", "serverSettings.userComment": "Комментарий:", "serverSettings.fullDocs": "Подробная инструкция по ключам",
   "error.envVariableDuplicate": "Переменная «{key}» уже существует в envlist «{envlist}».",
   "language.name": "Russian", "language.nativeName": "Русский",
   "login.subtitle": "Управление AmneziaWG на MikroTik", "login.username": "Логин", "login.password": "Пароль", "login.submit": "Войти", "login.invalid": "Неверный логин или пароль", "login.rateLimited": "Слишком много попыток. Попробуйте через несколько минут.",

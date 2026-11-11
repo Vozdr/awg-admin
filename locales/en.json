@@ -1,4 +1,5 @@
 {
+  "serverSettings.defaultValue": "Default: {value}", "serverSettings.noDefault": "none", "serverSettings.requiredKey": "Required key", "serverSettings.requiredKeyWithNote": "Required key: {note}", "serverSettings.userComment": "Comment:", "serverSettings.fullDocs": "Detailed key reference",
   "error.envVariableDuplicate": "Variable “{key}” already exists in envlist “{envlist}”.",
   "language.name": "English", "language.nativeName": "English",
   "login.subtitle": "Manage AmneziaWG on MikroTik", "login.username": "Username", "login.password": "Password", "login.submit": "Sign in", "login.invalid": "Invalid username or password", "login.rateLimited": "Too many attempts. Try again in a few minutes.",

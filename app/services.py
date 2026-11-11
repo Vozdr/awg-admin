@@ -20,6 +20,7 @@ import qrcode
 from qrcode.image.svg import SvgPathImage
 
 from .errors import AppError
+from .awg_docs import awg_environment_docs
 from .models import ClientCreate, ClientUpdate, ServerSettingsUpdate
 from .routeros import RouterOSClient
 from .settings import ServerSettings
@@ -152,6 +153,7 @@ AWG_ENV_DESCRIPTION_KEYS = {
     "AWG_STATS": "serverSettings.env.stats",
     "AWG_SPIN": "serverSettings.env.spin",
 }
+PROTECTED_AWG_ENV_KEYS = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB", "AWG_HEADER_PROTECTION_KEY"}
 
 METADATA_RE = re.compile(r"\s*\[(?:awgm-admin|awg-admin):v1(?:;disabled_at=([^\]]+))?\]\s*$")
 MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
@@ -797,6 +799,8 @@ class AwgAdminService:
         return {
             "settings": rows,
             "environment": env_rows,
+            "environment_docs": awg_environment_docs.info(),
+            "protected_environment_keys": sorted(PROTECTED_AWG_ENV_KEYS),
             "envlists": context.envlists,
             "existing_envlists": sorted({item.get("list", "") for item in context.all_env_records if item.get("list")}),
             "addresses": [{"id": item.get(".id", ""), "address": item.get("address", "")} for item in context.addresses],
@@ -931,7 +935,7 @@ class AwgAdminService:
                 )
             current_by_id = {item.get(".id", ""): item for item in context.env_records}
             address_by_id = {item.get(".id", ""): item for item in context.addresses}
-            protected = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB", "AWG_HEADER_PROTECTION_KEY"}
+            protected = PROTECTED_AWG_ENV_KEYS
             new_lists: list[str] = []
             added_pairs: set[tuple[str, str]] = set()
             for change in data.env_changes:
