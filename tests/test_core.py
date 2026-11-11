@@ -12,6 +12,7 @@ import zlib
 import pytest
 
 import app.awg_docs as awg_docs_module
+import app.services as services_module
 from app.errors import AppError, redact
 from app.awg_docs import AwgEnvironmentDocs, parse_environment_document
 from app.registry import ServerRegistry
@@ -577,6 +578,11 @@ def test_server_settings_report_required_variable_problems(monkeypatch):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setattr(
+        services_module,
+        "required_awg_environment_keys",
+        lambda: {"AWG_JC", "AWG_JMIN", "AWG_JMAX", "AWG_S1"},
+    )
     router = MutableRouterOS()
     router.env_records = [item for item in router.env_records if item["key"] != "AWG_JC"]
     next(item for item in router.env_records if item["key"] == "AWG_JMIN")["disabled"] = "yes"
@@ -604,6 +610,7 @@ def test_server_settings_protect_required_variables(monkeypatch, change):
     monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
     monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
     monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    monkeypatch.setattr(services_module, "required_awg_environment_keys", lambda: {"AWG_JC"})
     router = MutableRouterOS()
     service = AwgAdminService(Settings.from_env().primary_server, router)
     current = service.server_settings()
