@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, root_validator, validator
 
 
 class ClientCreate(BaseModel):
@@ -91,6 +91,12 @@ class EnvVariableChange(BaseModel):
     def clean_text(cls, value: str) -> str:
         return value.replace("\r", " ").replace("\n", " ").strip()
 
+    @root_validator
+    def require_added_value(cls, values: dict[str, object]) -> dict[str, object]:
+        if values.get("action") == "add" and not str(values.get("value", "")).strip():
+            raise ValueError("value is required when adding an environment variable")
+        return values
+
 
 class InterfaceAddressChange(BaseModel):
     action: Literal["add", "update", "delete"]
@@ -104,4 +110,5 @@ class ServerSettingsUpdate(BaseModel):
     env_changes: list[EnvVariableChange] = Field(default_factory=list)
     address_changes: list[InterfaceAddressChange] = Field(default_factory=list)
     regenerate_server_key: bool = False
+    regenerate_header_protection_key: bool = False
 

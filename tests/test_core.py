@@ -456,6 +456,8 @@ def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
     assert by_key["Occupied addresses"]["value"] == "192.168.177.2/32"
     assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
     assert "sensitive" not in by_env_key["AWG_HEADER_PROTECTION_KEY"]
+    assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["read_only"] is True
+    assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["special_action"] == "regenerate-header-key"
     assert by_env_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
     assert by_env_key["AWG_CLIENT_PUB"]["managed"] is True
     assert by_env_key["AWG_CLIENT_PUBS"]["managed"] is True
@@ -509,6 +511,36 @@ def test_server_settings_apply_staged_changes_and_restart(monkeypatch):
     assert next(item for item in router.env_records if item["key"] == "AWG_EXTRA")["list"] == "awg-extra"
     assert router.addresses[0]["address"] == "192.168.178.1/24"
     assert result["revision"] != current["revision"]
+
+
+def test_adding_environment_variable_requires_value():
+    with pytest.raises(ValueError):
+        ServerSettingsUpdate.parse_obj({
+            "revision": "0" * 64,
+            "env_changes": [{"action": "add", "envlist": "awg-extra", "key": "AWG_EXTRA", "value": ""}],
+        })
+
+
+def test_server_settings_remove_empty_envlist_from_container(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    router.envlists.append("awg-extra")
+    router.env_records.append({".id": "*extra", "list": "awg-extra", "key": "AWG_EXTRA", "value": "1", "comment": "", "disabled": "no"})
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+    extra = next(item for item in current["environment"] if item["id"] == "*extra")
+
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [{"action": "delete", "id": extra["id"], "envlist": extra["envlist"], "key": extra["key"]}],
+    }))
+
+    assert "awg-extra" not in router.envlists
+    assert not any(item.get("list") == "awg-extra" for item in router.env_records)
 
 
 def test_server_settings_do_not_start_stopped_container(monkeypatch):
@@ -579,6 +611,26 @@ def test_server_key_regeneration_updates_interface_and_environment(monkeypatch):
     assert env_public == router.wireguard["public-key"]
     assert env_public != "server-public"
     assert len(base64.b64decode(router.wireguard["private-key"])) == 32
+
+
+def test_header_protection_key_regeneration_updates_environment(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+    current = service.server_settings()
+
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "regenerate_header_protection_key": True,
+    }))
+
+    value = next(item for item in router.env_records if item["key"] == "AWG_HEADER_PROTECTION_KEY")["value"]
+    assert value != "visible-header-protection-key"
+    assert len(base64.b64decode(value)) == 32
 
 
 def test_service_uses_only_private_key_from_show_client_config(monkeypatch):

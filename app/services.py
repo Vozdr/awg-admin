@@ -750,7 +750,7 @@ class AwgAdminService:
             key_counts[key] = key_counts.get(key, 0) + 1
             list_key_counts[(envlist, key)] = list_key_counts.get((envlist, key), 0) + 1
         managed_keys = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"}
-        read_only_keys = managed_keys | {"AWG_REMOTE"}
+        read_only_keys = managed_keys | {"AWG_REMOTE", "AWG_HEADER_PROTECTION_KEY"}
         env_rows: list[dict[str, Any]] = []
         for record in sorted(context.env_records, key=lambda item: (item.get("key", ""), item.get("list", ""), item.get(".id", ""))):
             key = record.get("key", "")
@@ -765,7 +765,7 @@ class AwgAdminService:
                 "description_key": AWG_ENV_DESCRIPTION_KEYS.get(key, ""),
                 "managed": key in managed_keys,
                 "read_only": key in read_only_keys or key == "AWG_SERVER_PUB",
-                "special_action": "regenerate-key" if key == "AWG_SERVER_PUB" else "",
+                "special_action": "regenerate-server-key" if key == "AWG_SERVER_PUB" else "regenerate-header-key" if key == "AWG_HEADER_PROTECTION_KEY" else "",
                 "duplicate": key_counts.get(key, 0) > 1,
                 "duplicate_in_list": list_key_counts.get((envlist, key), 0) > 1,
             })
@@ -881,7 +881,7 @@ class AwgAdminService:
                 )
             current_by_id = {item.get(".id", ""): item for item in context.env_records}
             address_by_id = {item.get(".id", ""): item for item in context.addresses}
-            protected = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB"}
+            protected = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB", "AWG_HEADER_PROTECTION_KEY"}
             new_lists: list[str] = []
             for change in data.env_changes:
                 if change.action == "add":
@@ -917,7 +917,13 @@ class AwgAdminService:
             if not final_addresses:
                 raise AppError("SERVER_ADDRESSES_EMPTY", "error.serverAddressesEmpty", status_code=422)
 
-            changes_requested = bool(data.env_changes or data.address_changes or data.regenerate_server_key or data.listen_port is not None)
+            changes_requested = bool(
+                data.env_changes
+                or data.address_changes
+                or data.regenerate_server_key
+                or data.regenerate_header_protection_key
+                or data.listen_port is not None
+            )
             if not changes_requested:
                 return self.server_settings()
             container_id = context.container.get(".id", "")
@@ -957,8 +963,11 @@ class AwgAdminService:
                             "value": record.get("value", ""), "comment": record.get("comment", ""),
                             "disabled": record.get("disabled", "no"),
                         }))
-                if new_lists:
-                    envlists = context.envlists + [item for item in new_lists if item not in context.envlists]
+                candidate_envlists = context.envlists + [item for item in new_lists if item not in context.envlists]
+                remaining_env_records = self.client.print(ENV_MENU, proplist=("list",))
+                non_empty_envlists = {item.get("list", "") for item in remaining_env_records if item.get("list")}
+                envlists = [item for item in candidate_envlists if item in non_empty_envlists]
+                if envlists != context.envlists:
                     self.client.set(CONTAINER_MENU, container_id, {"envlists": ",".join(envlists)})
                     undo_actions.append(lambda: self.client.set(CONTAINER_MENU, container_id, {"envlists": ",".join(context.envlists)}))
                 for index, change in enumerate(data.address_changes):
@@ -990,6 +999,11 @@ class AwgAdminService:
                         undo_actions.append(lambda: self.client.set(WG_MENU, context.wireguard.get(".id", ""), {"private-key": context.wireguard.get("private-key", "")}))
                     for record in self._env_records(context, "AWG_SERVER_PUB"):
                         self.client.set(ENV_MENU, record[".id"], {"value": public_key})
+                        undo_actions.append(lambda item_id=record[".id"], value=record.get("value", ""): self.client.set(ENV_MENU, item_id, {"value": value}))
+                if data.regenerate_header_protection_key:
+                    header_key, _ = generate_wireguard_key_pair()
+                    for record in self._env_records(context, "AWG_HEADER_PROTECTION_KEY"):
+                        self.client.set(ENV_MENU, record[".id"], {"value": header_key})
                         undo_actions.append(lambda item_id=record[".id"], value=record.get("value", ""): self.client.set(ENV_MENU, item_id, {"value": value}))
                 if was_running:
                     self.client.action(CONTAINER_MENU, "start", container_id)
