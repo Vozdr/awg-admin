@@ -190,11 +190,11 @@ function renderServerSettings() {
     let actions=[];
     if (item.deleted) actions=[actionButton("undo-env",t("common.undo"),`data-id="${escapeHtml(item.id)}"`)];
     else if (item.special_action==="regenerate-server-key") actions=data.regenerateServerKey?[actionButton("undo-regenerate-server-key",t("common.undo"))]:[actionButton("regenerate-server-key",t("serverSettings.regenerateKey"))];
-    else if (item.special_action==="regenerate-header-key") actions=data.regenerateHeaderProtectionKey?[actionButton("undo-regenerate-header-key",t("common.undo"))]:[actionButton("regenerate-header-key",t("serverSettings.regenerateHeaderKey"))];
+    else if (item.special_action==="regenerate-header-key"&&data.regenerateHeaderProtectionKey) actions=[actionButton("undo-regenerate-header-key",t("common.undo"))];
     else if (!item.read_only) {
       if (item.editing) actions=[actionButton("apply-env",t("common.apply"),`data-id="${escapeHtml(item.id)}"`),actionButton("cancel-env-edit",t("common.cancel"),`data-id="${escapeHtml(item.id)}"`)];
       else if (item.required) actions=[actionButton("edit-env",t("common.edit"),`data-id="${escapeHtml(item.id)}"`),...(changed?[actionButton("undo-env",t("common.undo"),`data-id="${escapeHtml(item.id)}"`)]:[]),...(item.disabled?[actionButton("toggle-env",t("serverSettings.enable"),`data-id="${escapeHtml(item.id)}"`,"▶")]:[])];
-      else actions=[actionButton("edit-env",t("common.edit"),`data-id="${escapeHtml(item.id)}"`),...(changed?[actionButton("undo-env",t("common.undo"),`data-id="${escapeHtml(item.id)}"`)]:[]),actionButton("toggle-env",t(item.disabled?"serverSettings.enable":"serverSettings.disable"),`data-id="${escapeHtml(item.id)}"`,item.disabled?"▶":"Ⅱ"),actionButton("delete-env",t("common.delete"),`data-id="${escapeHtml(item.id)}"`)];
+      else actions=[...(item.special_action==="regenerate-header-key"?[actionButton("regenerate-header-key",t("serverSettings.regenerateHeaderKey"))]:[]),actionButton("edit-env",t("common.edit"),`data-id="${escapeHtml(item.id)}"`),...(changed?[actionButton("undo-env",t("common.undo"),`data-id="${escapeHtml(item.id)}"`)]:[]),actionButton("toggle-env",t(item.disabled?"serverSettings.enable":"serverSettings.disable"),`data-id="${escapeHtml(item.id)}"`,item.disabled?"▶":"Ⅱ"),actionButton("delete-env",t("common.delete"),`data-id="${escapeHtml(item.id)}"`)];
     }
     html+=`<div class="${classes}" data-env-row="${escapeHtml(item.id)}"><span class="setting-row-label"><span class="setting-key-line">${requiredKeyIcon(doc)}<span>${escapeHtml(item.key)}${marker}</span></span>${listBadge}${descriptionHtml}${badges}</span><span class="setting-control">${control}${settingActions(actions)}</span></div>`;
   }

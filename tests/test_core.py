@@ -545,8 +545,9 @@ def test_server_settings_derive_status_and_show_addresses_and_keys(monkeypatch):
     assert by_key["Occupied addresses"]["value"] == "192.168.177.2/32"
     assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["value"] == "visible-header-protection-key"
     assert "sensitive" not in by_env_key["AWG_HEADER_PROTECTION_KEY"]
-    assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["read_only"] is True
+    assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["read_only"] is False
     assert by_env_key["AWG_HEADER_PROTECTION_KEY"]["special_action"] == "regenerate-header-key"
+    assert "AWG_HEADER_PROTECTION_KEY" not in result["protected_environment_keys"]
     assert by_env_key["AWG_SERVER_PUB"]["description_key"] == "serverSettings.env.serverPublicKey"
     assert by_env_key["AWG_CLIENT_PUB"]["managed"] is True
     assert by_env_key["AWG_CLIENT_PUBS"]["managed"] is True
@@ -863,6 +864,47 @@ def test_header_protection_key_regeneration_updates_environment(monkeypatch):
     value = next(item for item in router.env_records if item["key"] == "AWG_HEADER_PROTECTION_KEY")["value"]
     assert value != "visible-header-protection-key"
     assert len(base64.b64decode(value)) == 32
+
+
+def test_header_protection_key_can_be_added_edited_disabled_and_deleted(monkeypatch):
+    monkeypatch.setenv("MIKROTIK_HOST", "172.17.0.1")
+    monkeypatch.setenv("MIKROTIK_USERNAME", "awg-admin")
+    monkeypatch.setenv("MIKROTIK_PASSWORD", "secret")
+    monkeypatch.setenv("AWG_CLIENT_ENDPOINT", "vpn.example.org:51820")
+    monkeypatch.setenv("SESSION_SECRET", "test-session-secret")
+    router = MutableRouterOS()
+    router.env_records = [item for item in router.env_records if item["key"] != "AWG_HEADER_PROTECTION_KEY"]
+    service = AwgAdminService(Settings.from_env().primary_server, router)
+
+    current = service.server_settings()
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [{
+            "action": "add", "envlist": "awg-base", "key": "AWG_HEADER_PROTECTION_KEY",
+            "value": "first-value", "comment": "optional protection", "disabled": False,
+        }],
+    }))
+    added = next(item for item in router.env_records if item["key"] == "AWG_HEADER_PROTECTION_KEY")
+
+    current = service.server_settings()
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [{
+            "action": "update", "id": added[".id"], "envlist": added["list"], "key": added["key"],
+            "value": "second-value", "comment": "optional protection", "disabled": True,
+        }],
+    }))
+    assert added["value"] == "second-value"
+    assert added["disabled"] == "yes"
+
+    current = service.server_settings()
+    service.update_server_settings(ServerSettingsUpdate.parse_obj({
+        "revision": current["revision"],
+        "env_changes": [{
+            "action": "delete", "id": added[".id"], "envlist": added["list"], "key": added["key"],
+        }],
+    }))
+    assert not any(item["key"] == "AWG_HEADER_PROTECTION_KEY" for item in router.env_records)
 
 
 def test_service_uses_only_private_key_from_show_client_config(monkeypatch):

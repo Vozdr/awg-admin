@@ -180,7 +180,7 @@ AWG_ENV_DESCRIPTION_KEYS = {
     "AWG_STATS": "serverSettings.env.stats",
     "AWG_SPIN": "serverSettings.env.spin",
 }
-PROTECTED_AWG_ENV_KEYS = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB", "AWG_HEADER_PROTECTION_KEY"}
+PROTECTED_AWG_ENV_KEYS = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS", "AWG_REMOTE", "AWG_SERVER_PUB"}
 
 METADATA_RE = re.compile(r"\s*\[(?:awgm-admin|awg-admin):v1(?:;disabled_at=([^\]]+))?\]\s*$")
 MISSING_PRIVATE_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEA="
@@ -811,7 +811,7 @@ class AwgAdminService:
             key_counts[key] = key_counts.get(key, 0) + 1
             list_key_counts[(envlist, key)] = list_key_counts.get((envlist, key), 0) + 1
         managed_keys = {"AWG_CLIENT_PUB", "AWG_CLIENT_PUBS"}
-        read_only_keys = managed_keys | {"AWG_REMOTE", "AWG_HEADER_PROTECTION_KEY"}
+        read_only_keys = managed_keys | {"AWG_REMOTE"}
         required_keys = required_awg_environment_keys()
         env_rows: list[dict[str, Any]] = []
         for record in sorted(context.env_records, key=lambda item: (item.get("key", ""), item.get("list", ""), item.get(".id", ""))):
